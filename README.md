@@ -52,6 +52,53 @@ After installation, restart Claude Code or reload `/hooks` to activate.
 
 ---
 
+## Configuration
+
+### macOS Sound Customization
+
+The notification uses the built-in `Funk` sound by default. You can customize or disable it by setting the `CC_NOTIFY_SOUND` environment variable in your shell configuration (`.zshrc`, `.bash_profile`, etc.) or directly in the hook command.
+
+#### Option 1: Use built-in system sounds (recommended)
+Uses native notification playback for perfect synchronization. Available built-in sounds (located in `/System/Library/Sounds/`):
+`Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`, `Sosumi`, `Submarine`, `Tink`
+
+```bash
+# Add to ~/.zshrc to change default sound
+export CC_NOTIFY_SOUND="Ping"
+```
+
+#### Option 2: Use custom sound files
+Uses `afplay` for playback, supports **all common audio formats**: `.mp3`, `.wav`, `.aiff`, `.m4a`, `.caf`, etc. No encoding or duration limits.
+
+```bash
+# Add to ~/.zshrc
+export CC_NOTIFY_SOUND="/path/to/your/custom/sound.mp3"
+```
+
+#### Option 0: Disable sound
+```bash
+# Add to ~/.zshrc to turn off notification sound
+export CC_NOTIFY_SOUND=""
+```
+
+#### Option 3: Modify the hook command directly
+Edit the `Stop` hook entry in your `settings.json` to include the sound variable:
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "CC_NOTIFY_SOUND=\"Funk\" ~/.claude/hooks/cc-notify/notify.sh",
+        "async": true,
+        "timeout": 10
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## How It Works
 
 1. The installer copies the notify script into `<target>/.claude/hooks/cc-notify/`

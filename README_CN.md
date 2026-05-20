@@ -52,6 +52,53 @@ bash mac/install.sh
 
 ---
 
+## 配置说明
+
+### macOS 通知音效自定义
+
+通知默认使用系统内置的 `Funk` 音效。你可以通过在 shell 配置文件（`.zshrc`、`.bash_profile` 等）中设置 `CC_NOTIFY_SOUND` 环境变量，或直接修改钩子命令来自定义或禁用音效。
+
+#### 选项1：使用系统内置音效（推荐）
+使用原生通知播放，与弹窗完全同步。可用的内置音效（位于 `/System/Library/Sounds/` 目录）：
+`Basso`、`Blow`、`Bottle`、`Frog`、`Funk`、`Glass`、`Hero`、`Morse`、`Ping`、`Pop`、`Purr`、`Sosumi`、`Submarine`、`Tink`
+
+```bash
+# 添加到 ~/.zshrc 文件修改默认音效
+export CC_NOTIFY_SOUND="Ping"
+```
+
+#### 选项2：使用自定义音效文件
+使用 `afplay` 播放，**支持所有常见音频格式**：`.mp3`、`.wav`、`.aiff`、`.m4a`、`.caf` 等，无编码或时长限制。
+
+```bash
+# 添加到 ~/.zshrc 文件
+export CC_NOTIFY_SOUND="/path/to/your/custom/sound.mp3"
+```
+
+#### 选项0：禁用音效
+```bash
+# 添加到 ~/.zshrc 文件关闭通知音效
+export CC_NOTIFY_SOUND=""
+```
+
+#### 选项3：直接修改钩子命令
+编辑 `settings.json` 中的 `Stop` 钩子条目，直接包含音效变量：
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "CC_NOTIFY_SOUND=\"Funk\" ~/.claude/hooks/cc-notify/notify.sh",
+        "async": true,
+        "timeout": 10
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## 工作原理
 
 1. 安装脚本将通知脚本复制到 `<目标>/.claude/hooks/cc-notify/`
