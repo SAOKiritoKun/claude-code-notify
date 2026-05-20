@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File windows\install-claude-notify.ps1
 ### macOS
 
 ```bash
-bash mac/install.sh
+bash mac/install-claude-notify.sh
 ```
 
 两个安装脚本都会提示你选择安装范围：
@@ -120,8 +120,7 @@ windows/
 
 mac/
 ├── notify.sh                   # 通知脚本（Stop 事件时调用）
-├── install-claude-notify.sh    # 交互式安装脚本
-└── install.sh                  # 安装脚本的启动入口
+└── install-claude-notify.sh    # 交互式安装脚本
 ```
 
 ---

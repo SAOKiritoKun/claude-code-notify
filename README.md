@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File windows\install-claude-notify.ps1
 ### macOS
 
 ```bash
-bash mac/install.sh
+bash mac/install-claude-notify.sh
 ```
 
 Both installers prompt you to choose an install scope:
@@ -120,8 +120,7 @@ windows/
 
 mac/
 ├── notify.sh                   # Notification script (invoked on Stop)
-├── install-claude-notify.sh    # Interactive installer
-└── install.sh                  # Launcher wrapper for the installer
+└── install-claude-notify.sh    # Interactive installer
 ```
 
 ---
