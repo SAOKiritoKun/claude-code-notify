@@ -34,19 +34,9 @@ chmod +x "$NOTIFY_DEST"
 echo "[OK] Installed notify.sh -> $NOTIFY_DEST"
 
 # 2. Patch settings.json
-SETTINGS_EXISTED=false
-[ -f "$SETTINGS_FILE" ] && SETTINGS_EXISTED=true
-
-if [ "$SETTINGS_EXISTED" = false ]; then
+if [ ! -f "$SETTINGS_FILE" ]; then
     echo '{}' > "$SETTINGS_FILE"
     echo "[OK] Created $SETTINGS_FILE"
-fi
-
-if [ "$SETTINGS_EXISTED" = true ]; then
-    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-    BACKUP_FILE="$SETTINGS_FILE.$TIMESTAMP.bak"
-    cp "$SETTINGS_FILE" "$BACKUP_FILE"
-    echo "[OK] Backup -> $BACKUP_FILE"
 fi
 
 # Patch using python3

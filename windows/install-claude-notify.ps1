@@ -66,9 +66,16 @@ if (-not (Test-Path $hooksDir)) {
 Copy-Item -Path "$PSScriptRoot\notify.ps1" -Destination $notifyDest -Force
 Write-Host "[OK] Installed notify.ps1 -> $notifyDest"
 
+# Register AppUserModelID so Toast notifications show "Claude Code"
+$regPath = "HKCU:\SOFTWARE\Classes\AppUserModelId\ClaudeCode.Notify"
+if (-not (Test-Path $regPath)) {
+    New-Item -Path $regPath -Force | Out-Null
+}
+Set-ItemProperty -Path $regPath -Name "DisplayName" -Value "Claude Code"
+Write-Host "[OK] Registered AppUserModelId: ClaudeCode.Notify"
+
 # 2. Patch settings.json
-$settingsExisted = Test-Path $settingsFile
-if (-not $settingsExisted) {
+if (-not (Test-Path $settingsFile)) {
     '{}' | Set-Content $settingsFile -Encoding UTF8
     Write-Host "[OK] Created $settingsFile"
 }
@@ -99,13 +106,6 @@ if ($stopProp) {
         $cmds = @($arr[$i].hooks) | Where-Object { $_.command -like "*cc-notify*" }
         if ($cmds) { $existingIndex = $i; break }
     }
-}
-
-if ($settingsExisted) {
-    $timestamp  = Get-Date -Format "yyyyMMdd_HHmmss"
-    $backupFile = "$settingsFile.$timestamp.bak"
-    Copy-Item -Path $settingsFile -Destination $backupFile
-    Write-Host "[OK] Backup -> $backupFile"
 }
 
 if ($existingIndex -ge 0) {

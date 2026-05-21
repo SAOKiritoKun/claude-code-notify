@@ -15,7 +15,7 @@ Language: English | [中文文档](README_CN.md)
 
 | Platform | Mechanism |
 |----------|-----------|
-| Windows  | Balloon tip via `System.Windows.Forms.NotifyIcon` |
+| Windows  | Toast notification via WinRT `ToastNotificationManager` (appears in Notification Center) |
 | macOS    | Native notification via `osascript` |
 
 ---
@@ -33,8 +33,6 @@ Language: English | [中文文档](README_CN.md)
 
 ### Windows
 
-Double-click `windows/install.bat`, or run in PowerShell:
-
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\install-claude-notify.ps1
 ```
@@ -51,6 +49,32 @@ Both installers prompt you to choose an install scope:
 - **Project-local** — applies only to the current project (`.claude/` in the working directory)
 
 After installation, restart Claude Code or reload `/hooks` to activate.
+
+> **Windows:** The installer also registers a registry key under `HKCU` (no admin rights required) so notifications appear as "Claude Code" in the Notification Center.
+
+---
+
+## Uninstall
+
+### Windows
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\uninstall-claude-notify.ps1
+```
+
+### macOS
+
+```bash
+bash mac/uninstall-claude-notify.sh
+```
+
+The uninstaller prompts you to choose a scope:
+
+- **[1] Current project only** — removes hook from `.claude/` in the working directory. The registry key is **not** removed (Windows only; it may still be needed by a global install).
+- **[2] Global only** — removes hook from `~/.claude`. On Windows, also deletes the `ClaudeCode.Notify` registry key.
+- **[3] Both** — removes all of the above
+
+Only `cc-notify` hook entries are removed. All other hooks in `settings.json` are preserved.
 
 ---
 
@@ -130,7 +154,9 @@ Or set it inline in the hook command in `settings.json`:
 3. On each `Stop` event, the notify script reads `transcript_path` from the JSON payload, walks the transcript backwards to find the last user message, and displays it as the notification body
 4. Falls back to `"Task completed"` if the transcript is unavailable
 
-**The installer is idempotent** — re-running it updates the existing hook entry rather than duplicating it. `settings.json` is backed up before every modification (`settings.json.<timestamp>.bak`).
+**The installer is idempotent** — re-running it updates the existing hook entry rather than duplicating it.
+
+**Windows only:** The installer also writes a registry key `HKCU:\SOFTWARE\Classes\AppUserModelId\ClaudeCode.Notify` (`DisplayName = "Claude Code"`) so Toast notifications are attributed to "Claude Code" in the Notification Center. No admin rights required. To verify: `Get-ItemProperty "HKCU:\SOFTWARE\Classes\AppUserModelId\ClaudeCode.Notify"` — output should include `DisplayName : Claude Code`. The uninstaller removes this key when scope **[2] Global only** or **[3] Both** is chosen.
 
 ---
 
@@ -138,13 +164,14 @@ Or set it inline in the hook command in `settings.json`:
 
 ```
 windows/
-├── notify.ps1                  # Notification script (invoked on Stop)
-├── install-claude-notify.ps1   # Interactive installer
-└── install.bat                 # Launcher wrapper for the installer
+├── notify.ps1                    # Notification script (invoked on Stop)
+├── install-claude-notify.ps1     # Interactive installer
+└── uninstall-claude-notify.ps1   # Interactive uninstaller
 
 mac/
-├── notify.sh                   # Notification script (invoked on Stop)
-└── install-claude-notify.sh    # Interactive installer
+├── notify.sh                     # Notification script (invoked on Stop)
+├── install-claude-notify.sh      # Interactive installer
+└── uninstall-claude-notify.sh    # Interactive uninstaller
 ```
 
 ---

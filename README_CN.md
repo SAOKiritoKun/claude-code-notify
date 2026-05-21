@@ -15,7 +15,7 @@
 
 | 平台    | 通知方式 |
 |---------|---------|
-| Windows | 通过 `System.Windows.Forms.NotifyIcon` 显示气泡通知 |
+| Windows | 通过 WinRT `ToastNotificationManager` 显示 Toast 通知（显示在通知中心） |
 | macOS   | 通过 `osascript` 显示原生系统通知 |
 
 ---
@@ -33,8 +33,6 @@
 
 ### Windows
 
-双击 `windows/install.bat`，或在 PowerShell 中运行：
-
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\install-claude-notify.ps1
 ```
@@ -51,6 +49,30 @@ bash mac/install-claude-notify.sh
 - **仅当前项目** —— 适用于当前工作目录（`.claude/`）
 
 安装完成后，重启 Claude Code 或重新加载 `/hooks` 即可生效。
+
+---
+
+## 卸载方法
+
+### Windows
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\uninstall-claude-notify.ps1
+```
+
+### macOS
+
+```bash
+bash mac/uninstall-claude-notify.sh
+```
+
+卸载脚本会提示你选择卸载范围：
+
+- **[1] 仅当前项目** —— 移除当前工作目录 `.claude/` 中的 hook，**不删除**注册表键（仅 Windows；全局安装可能仍需使用）
+- **[2] 仅全局** —— 移除 `~/.claude` 中的 hook；Windows 下同时删除 `ClaudeCode.Notify` 注册表键
+- **[3] 全部** —— 以上全部移除
+
+卸载脚本只会移除含 `cc-notify` 标识的 hook 条目，`settings.json` 中的其他 hook 不受影响。
 
 ---
 
@@ -130,7 +152,9 @@ export CC_NOTIFY_SOUND=""
 3. 每次触发 `Stop` 事件时，通知脚本从 JSON 载荷中读取 `transcript_path`，从后往前遍历对话记录，找到最后一条用户消息作为通知内容
 4. 若无法读取对话记录，则回退显示 `"Task completed"`
 
-**安装脚本是幂等的** —— 重复运行只会更新已有的钩子条目，不会重复添加。`settings.json` 在每次修改前会自动备份（`settings.json.<时间戳>.bak`）。
+**安装脚本是幂等的** —— 重复运行只会更新已有的钩子条目，不会重复添加。
+
+**仅 Windows：** 安装脚本还会写入注册表键 `HKCU:\SOFTWARE\Classes\AppUserModelId\ClaudeCode.Notify`（`DisplayName = "Claude Code"`），使 Toast 通知在通知中心显示 "Claude Code" 作为应用名称，无需管理员权限。验证方式：`Get-ItemProperty "HKCU:\SOFTWARE\Classes\AppUserModelId\ClaudeCode.Notify"`，输出应包含 `DisplayName : Claude Code`。卸载时选择 **[2] 仅全局** 或 **[3] 全部** 会自动删除此键。
 
 ---
 
@@ -138,13 +162,14 @@ export CC_NOTIFY_SOUND=""
 
 ```
 windows/
-├── notify.ps1                  # 通知脚本（Stop 事件时调用）
-├── install-claude-notify.ps1   # 交互式安装脚本
-└── install.bat                 # 安装脚本的启动入口
+├── notify.ps1                    # 通知脚本（Stop 事件时调用）
+├── install-claude-notify.ps1     # 交互式安装脚本
+└── uninstall-claude-notify.ps1   # 交互式卸载脚本
 
 mac/
-├── notify.sh                   # 通知脚本（Stop 事件时调用）
-└── install-claude-notify.sh    # 交互式安装脚本
+├── notify.sh                     # 通知脚本（Stop 事件时调用）
+├── install-claude-notify.sh      # 交互式安装脚本
+└── uninstall-claude-notify.sh    # 交互式卸载脚本
 ```
 
 ---
