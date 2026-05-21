@@ -1,6 +1,13 @@
 param(
-    [string]$Title = "Claude Code Task Done"
+    [string]$Title = "Claude Code Task Done",
+    [string]$Sound = "ding.wav"
 )
+
+# Sound: filename under C:\Windows\Media\ or full path. Empty string to disable.
+# Priority: -Sound param > CC_NOTIFY_SOUND env var > default ding.wav
+if ($Sound -eq "ding.wav" -and $env:CC_NOTIFY_SOUND -ne $null) {
+    $Sound = $env:CC_NOTIFY_SOUND
+}
 
 if (-not [Console]::IsInputRedirected) {
     $Message = "(no input)"
@@ -44,21 +51,80 @@ if (-not [Console]::IsInputRedirected) {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$notify = New-Object System.Windows.Forms.NotifyIcon
-$notify.Icon = [System.Drawing.SystemIcons]::Information
-$notify.BalloonTipIcon  = [System.Windows.Forms.ToolTipIcon]::Info
-$notify.BalloonTipTitle = $Title
-$notify.BalloonTipText  = $Message
-$notify.Visible = $true
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
 
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 5500
-$timer.Add_Tick({
-    $timer.Stop()
-    $notify.Dispose()
-    [System.Windows.Forms.Application]::Exit()
-})
+public class TrayNotify {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct NOTIFYICONDATA {
+        public int    cbSize;
+        public IntPtr hWnd;
+        public int    uID;
+        public int    uFlags;
+        public int    uCallbackMessage;
+        public IntPtr hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string szTip;
+        public int    dwState;
+        public int    dwStateMask;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string szInfo;
+        public int    uTimeoutOrVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string szInfoTitle;
+        public int    dwInfoFlags;
+    }
 
-$notify.ShowBalloonTip(5000)
-$timer.Start()
-[System.Windows.Forms.Application]::Run()
+    public const int NIM_ADD    = 0x00000000;
+    public const int NIM_MODIFY = 0x00000001;
+    public const int NIM_DELETE = 0x00000002;
+    public const int NIF_MESSAGE = 0x00000001;
+    public const int NIF_ICON    = 0x00000002;
+    public const int NIF_TIP     = 0x00000004;
+    public const int NIF_INFO    = 0x00000010;
+    public const int NIIF_NOSOUND = 0x00000010;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool Shell_NotifyIcon(int dwMessage, ref NOTIFYICONDATA lpData);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr CreateWindowEx(int dwExStyle, string lpClassName, string lpWindowName,
+        int dwStyle, int x, int y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool DestroyWindow(IntPtr hWnd);
+}
+"@
+
+$hWnd = [TrayNotify]::CreateWindowEx(0, "STATIC", "", 0, 0, 0, 0, 0, [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero)
+$hIcon = [System.Drawing.SystemIcons]::Information.Handle
+
+$nid = New-Object TrayNotify+NOTIFYICONDATA
+$nid.cbSize           = [System.Runtime.InteropServices.Marshal]::SizeOf($nid)
+$nid.hWnd             = $hWnd
+$nid.uID              = 1
+$nid.uFlags           = [TrayNotify]::NIF_ICON -bor [TrayNotify]::NIF_TIP -bor [TrayNotify]::NIF_INFO
+$nid.hIcon            = $hIcon
+$nid.szTip            = $Title
+$nid.szInfoTitle      = $Title
+$nid.szInfo           = $Message
+$nid.uTimeoutOrVersion = 5000
+$nid.dwInfoFlags      = [TrayNotify]::NIIF_NOSOUND
+
+[TrayNotify]::Shell_NotifyIcon([TrayNotify]::NIM_ADD, [ref]$nid) | Out-Null
+
+if ($Sound -ne "") {
+    if (-not [System.IO.Path]::IsPathRooted($Sound)) {
+        $Sound = "C:\Windows\Media\$Sound"
+    }
+    if (Test-Path $Sound) {
+        $player = New-Object System.Media.SoundPlayer $Sound
+        $player.Play()
+    }
+}
+
+Start-Sleep -Seconds 6
+[TrayNotify]::Shell_NotifyIcon([TrayNotify]::NIM_DELETE, [ref]$nid) | Out-Null
+[TrayNotify]::DestroyWindow($hWnd)

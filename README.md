@@ -2,6 +2,8 @@
 
 > Desktop notifications for [Claude Code](https://claude.ai/code) — get alerted the moment a task finishes, with your original prompt shown as the notification body.
 
+Language: English | [中文文档](README_CN.md)
+
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -52,49 +54,71 @@ After installation, restart Claude Code or reload `/hooks` to activate.
 
 ---
 
-## Configuration
+## Other Configuration *(optional)*
 
-### macOS Sound Customization
+### Sound
 
-The notification uses the built-in `Funk` sound by default. You can customize or disable it by setting the `CC_NOTIFY_SOUND` environment variable in your shell configuration (`.zshrc`, `.bash_profile`, etc.) or directly in the hook command.
+Sound plays automatically with each notification. This is optional — you can change the sound or disable it entirely.
 
-#### Option 1: Use built-in system sounds (recommended)
-Uses native notification playback for perfect synchronization. Available built-in sounds (located in `/System/Library/Sounds/`):
-`Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`, `Sosumi`, `Submarine`, `Tink`
+#### Windows
+
+Default sound: `ding.wav` (from `C:\Windows\Media\`).
+
+Customize via the `-Sound` parameter in the hook command in `settings.json`:
+
+```json
+"command": "powershell -ExecutionPolicy Bypass -NonInteractive -File \"...notify.ps1\" -Sound chord.wav"
+```
+
+Common built-in sounds: `ding.wav`, `chimes.wav`, `chord.wav`, `notify.wav`, `tada.wav`, `Windows Exclamation.wav`, `Windows Notify.wav`
+
+Use a full path for a custom file (`.wav` only):
+
+```json
+"command": "powershell ... -Sound \"C:\\path\\to\\sound.wav\""
+```
+
+Disable sound:
+
+```json
+"command": "powershell ... -Sound \"\""
+```
+
+Alternatively, set the `CC_NOTIFY_SOUND` environment variable in your PowerShell profile as a fallback when `-Sound` is not specified:
+
+```powershell
+$env:CC_NOTIFY_SOUND = "chord.wav"
+```
+
+#### macOS
+
+Default sound: `Funk` (built-in system sound).
+
+Customize via the `CC_NOTIFY_SOUND` environment variable in `.zshrc` or `.bash_profile`:
 
 ```bash
-# Add to ~/.zshrc to change default sound
 export CC_NOTIFY_SOUND="Ping"
 ```
 
-#### Option 2: Use custom sound files
-Uses `afplay` for playback, supports **all common audio formats**: `.mp3`, `.wav`, `.aiff`, `.m4a`, `.caf`, etc. No encoding or duration limits.
+Available built-in sounds (from `/System/Library/Sounds/`):
+`Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`, `Sosumi`, `Submarine`, `Tink`
+
+Use a full path for a custom file (`.mp3`, `.wav`, `.aiff`, `.m4a`, `.caf`, etc.):
 
 ```bash
-# Add to ~/.zshrc
-export CC_NOTIFY_SOUND="/path/to/your/custom/sound.mp3"
+export CC_NOTIFY_SOUND="/path/to/sound.mp3"
 ```
 
-#### Option 0: Disable sound
+Disable sound:
+
 ```bash
-# Add to ~/.zshrc to turn off notification sound
 export CC_NOTIFY_SOUND=""
 ```
 
-#### Option 3: Modify the hook command directly
-Edit the `Stop` hook entry in your `settings.json` to include the sound variable:
+Or set it inline in the hook command in `settings.json`:
+
 ```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "command": "CC_NOTIFY_SOUND=\"Funk\" ~/.claude/hooks/cc-notify/notify.sh",
-        "async": true,
-        "timeout": 10
-      }
-    ]
-  }
-}
+"command": "CC_NOTIFY_SOUND=\"Ping\" ~/.claude/hooks/cc-notify/notify.sh"
 ```
 
 ---

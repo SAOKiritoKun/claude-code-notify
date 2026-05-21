@@ -2,6 +2,8 @@
 
 > [Claude Code](https://claude.ai/code) 任务完成桌面通知 —— 任务结束时立即弹出系统通知，并显示你的原始提示词作为通知内容。
 
+语言: [English](README.md) | 中文
+
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -52,49 +54,71 @@ bash mac/install-claude-notify.sh
 
 ---
 
-## 配置说明
+## 其他配置说明 *(可选)*
 
-### macOS 通知音效自定义
+### 音效
 
-通知默认使用系统内置的 `Funk` 音效。你可以通过在 shell 配置文件（`.zshrc`、`.bash_profile` 等）中设置 `CC_NOTIFY_SOUND` 环境变量，或直接修改钩子命令来自定义或禁用音效。
+每次通知时自动播放音效，此项为可选配置 —— 可以更换音效或完全禁用。
 
-#### 选项1：使用系统内置音效（推荐）
-使用原生通知播放，与弹窗完全同步。可用的内置音效（位于 `/System/Library/Sounds/` 目录）：
-`Basso`、`Blow`、`Bottle`、`Frog`、`Funk`、`Glass`、`Hero`、`Morse`、`Ping`、`Pop`、`Purr`、`Sosumi`、`Submarine`、`Tink`
+#### Windows
+
+默认音效：`ding.wav`（来自 `C:\Windows\Media\`）。
+
+通过 `settings.json` 钩子命令中的 `-Sound` 参数自定义：
+
+```json
+"command": "powershell -ExecutionPolicy Bypass -NonInteractive -File \"...notify.ps1\" -Sound chord.wav"
+```
+
+常用内置音效：`ding.wav`、`chimes.wav`、`chord.wav`、`notify.wav`、`tada.wav`、`Windows Exclamation.wav`、`Windows Notify.wav`
+
+使用完整路径指定自定义文件（仅支持 `.wav`）：
+
+```json
+"command": "powershell ... -Sound \"C:\\path\\to\\sound.wav\""
+```
+
+禁用音效：
+
+```json
+"command": "powershell ... -Sound \"\""
+```
+
+也可以在 PowerShell profile 中设置 `CC_NOTIFY_SOUND` 环境变量作为备选（未指定 `-Sound` 时生效）：
+
+```powershell
+$env:CC_NOTIFY_SOUND = "chord.wav"
+```
+
+#### macOS
+
+默认音效：`Funk`（系统内置音效）。
+
+通过 `.zshrc` 或 `.bash_profile` 中的 `CC_NOTIFY_SOUND` 环境变量自定义：
 
 ```bash
-# 添加到 ~/.zshrc 文件修改默认音效
 export CC_NOTIFY_SOUND="Ping"
 ```
 
-#### 选项2：使用自定义音效文件
-使用 `afplay` 播放，**支持所有常见音频格式**：`.mp3`、`.wav`、`.aiff`、`.m4a`、`.caf` 等，无编码或时长限制。
+可用内置音效（来自 `/System/Library/Sounds/`）：
+`Basso`、`Blow`、`Bottle`、`Frog`、`Funk`、`Glass`、`Hero`、`Morse`、`Ping`、`Pop`、`Purr`、`Sosumi`、`Submarine`、`Tink`
+
+使用完整路径指定自定义文件（支持 `.mp3`、`.wav`、`.aiff`、`.m4a`、`.caf` 等）：
 
 ```bash
-# 添加到 ~/.zshrc 文件
-export CC_NOTIFY_SOUND="/path/to/your/custom/sound.mp3"
+export CC_NOTIFY_SOUND="/path/to/sound.mp3"
 ```
 
-#### 选项0：禁用音效
+禁用音效：
+
 ```bash
-# 添加到 ~/.zshrc 文件关闭通知音效
 export CC_NOTIFY_SOUND=""
 ```
 
-#### 选项3：直接修改钩子命令
-编辑 `settings.json` 中的 `Stop` 钩子条目，直接包含音效变量：
+也可以直接在 `settings.json` 的钩子命令中内联设置：
+
 ```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "command": "CC_NOTIFY_SOUND=\"Funk\" ~/.claude/hooks/cc-notify/notify.sh",
-        "async": true,
-        "timeout": 10
-      }
-    ]
-  }
-}
+"command": "CC_NOTIFY_SOUND=\"Ping\" ~/.claude/hooks/cc-notify/notify.sh"
 ```
 
 ---

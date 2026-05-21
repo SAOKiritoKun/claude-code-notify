@@ -83,7 +83,7 @@ if (-not $json.PSObject.Properties['hooks']) {
 
 $hookEntry = [PSCustomObject]@{
     type    = "command"
-    command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`""
+    command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`" -Sound ding.wav"
     timeout = 10
     async   = $true
 }
