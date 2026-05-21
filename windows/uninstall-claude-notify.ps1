@@ -55,10 +55,38 @@ function Remove-CcNotify {
             $arr = @($stopProp.Value)
             $newArr = @()
             foreach ($block in $arr) {
-                $hasCcNotify = @($block.hooks) | Where-Object { $_.command -like "*cc-notify*" }
-                if ($hasCcNotify) {
-                    $found = $true
+                if ($block.PSObject.Properties['hooks'] -and $block.hooks -is [array]) {
+                    $filteredHooks = @()
+                    $ccNotifyInBlock = $false
+                    foreach ($hook in $block.hooks) {
+                        # Only remove hooks that match our exact installer signature
+                        if ($hook.PSObject.Properties['command'] -and
+                            $hook.command -like "*cc-notify*" -and
+                            $hook.type -eq "command" -and
+                            $hook.timeout -eq 10 -and
+                            $hook.async -eq $true) {
+                            $ccNotifyInBlock = $true
+                            $found = $true
+                        } else {
+                            # Keep all other hooks untouched
+                            $filteredHooks += $hook
+                        }
+                    }
+
+                    if ($filteredHooks.Count -gt 0) {
+                        # Keep the block with remaining hooks
+                        $newBlock = $block.PSObject.Copy()
+                        $newBlock.hooks = $filteredHooks
+                        $newArr += $newBlock
+                    } elseif ($ccNotifyInBlock) {
+                        # Block only had our cc-notify hook, skip adding it
+                        $found = $true
+                    } else {
+                        # No cc-notify hooks, keep the block as is
+                        $newArr += $block
+                    }
                 } else {
+                    # Not a recognized block format, keep it untouched
                     $newArr += $block
                 }
             }

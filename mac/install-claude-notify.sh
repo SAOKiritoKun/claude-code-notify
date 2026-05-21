@@ -1,12 +1,14 @@
 #!/bin/bash
 # Claude Code Turn Notification - One-click installer (macOS)
 
-set -e
+set +e  # Disable exit on error to make script more robust
 
 CLAUDE_DIR_GLOBAL="$HOME/.claude"
 CLAUDE_DIR_PROJECT="$(pwd)/.claude"
 
 echo "=== Claude Code Turn Notification Installer ==="
+echo ""
+echo "This will install a desktop notification hook that fires when Claude Code finishes a task."
 echo ""
 echo "Install location:"
 echo "  [1] Global (applies to all projects)  -> $CLAUDE_DIR_GLOBAL"
@@ -27,64 +29,135 @@ SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 NOTIFY_DEST="$HOOKS_DIR/notify.sh"
 SCRIPT_DIR="$(dirname "$0")"
 
-# 1. Always overwrite notify script
-mkdir -p "$HOOKS_DIR"
-cp "$SCRIPT_DIR/notify.sh" "$NOTIFY_DEST"
-chmod +x "$NOTIFY_DEST"
-echo "[OK] Installed notify.sh -> $NOTIFY_DEST"
-
-# 2. Patch settings.json
-if [ ! -f "$SETTINGS_FILE" ]; then
-    echo '{}' > "$SETTINGS_FILE"
-    echo "[OK] Created $SETTINGS_FILE"
+# 1. Install notify script
+echo "[INFO] Installing notification scripts..."
+if ! mkdir -p "$HOOKS_DIR"; then
+    echo "[ERROR] Failed to create directory $HOOKS_DIR (permission denied)"
+    exit 1
 fi
 
-# Patch using python3
+if ! cp "$SCRIPT_DIR/notify.sh" "$NOTIFY_DEST"; then
+    echo "[ERROR] Failed to copy notify.sh to $NOTIFY_DEST"
+    exit 1
+fi
+
+if ! chmod +x "$NOTIFY_DEST"; then
+    echo "[WARNING] Failed to make $NOTIFY_DEST executable"
+else
+    echo "[OK] Installed notify.sh -> $NOTIFY_DEST"
+fi
+
+# 2. Patch settings.json
+echo "[INFO] Configuring hooks in settings.json..."
+
+# Check if python3 is available
+if ! command -v python3 &> /dev/null; then
+    echo "[ERROR] python3 not found. Please install Python 3 first."
+    exit 1
+fi
+
+# Create settings.json if it doesn't exist
+if [ ! -f "$SETTINGS_FILE" ]; then
+    if echo '{}' > "$SETTINGS_FILE"; then
+        echo "[OK] Created new settings.json file"
+    else
+        echo "[ERROR] Failed to create $SETTINGS_FILE (permission denied)"
+        exit 1
+    fi
+fi
+
+# Check if file is readable and writable
+if [ ! -r "$SETTINGS_FILE" ]; then
+    echo "[ERROR] $SETTINGS_FILE is not readable"
+    exit 1
+fi
+
+if [ ! -w "$SETTINGS_FILE" ]; then
+    echo "[ERROR] $SETTINGS_FILE is not writable"
+    exit 1
+fi
+
+# Patch using python3 with error handling
 python3 - "$SETTINGS_FILE" "$NOTIFY_DEST" <<'EOF'
 import sys, json, copy
 
-settings_file = sys.argv[1]
-notify_dest   = sys.argv[2]
+try:
+    settings_file = sys.argv[1]
+    notify_dest   = sys.argv[2]
 
-with open(settings_file, "r", encoding="utf-8") as f:
-    data = json.load(f)
+    with open(settings_file, "r", encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print("[ERROR] settings.json is not valid JSON. Please fix the file first.")
+            sys.exit(1)
 
-if "hooks" not in data:
-    data["hooks"] = {}
+    # Ensure data is a dict
+    if not isinstance(data, dict):
+        print("[ERROR] settings.json root is not an object. Please fix the file first.")
+        sys.exit(1)
 
-hook_entry = {
-    "type":    "command",
-    "command": f"bash \"{notify_dest}\"",
-    "timeout": 10,
-    "async":   True
-}
-stop_block = {"hooks": [hook_entry]}
+    if "hooks" not in data or not isinstance(data["hooks"], dict):
+        data["hooks"] = {}
 
-stop_hooks = data["hooks"].get("Stop", [])
+    hook_entry = {
+        "type":    "command",
+        "command": f"bash \"{notify_dest}\"",
+        "timeout": 10,
+        "async":   True
+    }
+    stop_block = {"hooks": [hook_entry]}
 
-# Find existing cc-notify entry index
-existing_index = -1
-for i, block in enumerate(stop_hooks):
-    for h in block.get("hooks", []):
-        if "cc-notify" in h.get("command", ""):
-            existing_index = i
-            break
+    stop_hooks = data["hooks"].get("Stop", [])
+    if not isinstance(stop_hooks, list):
+        stop_hooks = []
 
-if existing_index >= 0:
-    stop_hooks[existing_index] = stop_block
-    print("[OK] Updated existing Stop hook in settings.json")
-elif stop_hooks:
-    stop_hooks.append(stop_block)
-    print("[OK] Appended Stop hook to settings.json")
-else:
-    data["hooks"]["Stop"] = [stop_block]
-    print("[OK] Added Stop hook to settings.json")
+    # Find existing cc-notify entry index
+    existing_index = -1
+    for i, block in enumerate(stop_hooks):
+        if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
+            for h in block["hooks"]:
+                if isinstance(h, dict) and "command" in h and "cc-notify" in h["command"]:
+                    existing_index = i
+                    break
 
-with open(settings_file, "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=4, ensure_ascii=False)
-    f.write("\n")
+    if existing_index >= 0:
+        stop_hooks[existing_index] = stop_block
+        print("[OK] Updated existing cc-notify Stop hook")
+    elif stop_hooks:
+        stop_hooks.append(stop_block)
+        print("[OK] Added cc-notify Stop hook to existing hooks")
+    else:
+        data["hooks"]["Stop"] = [stop_block]
+        print("[OK] Created new Stop hook configuration")
+
+    # Write back the modified settings
+    with open(settings_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+        f.write("\n")
+
+except Exception as e:
+    print(f"[ERROR] Failed to update settings.json: {str(e)}")
+    sys.exit(1)
 EOF
+
+# Check if python command succeeded
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Installation failed. Please fix the above errors and try again."
+    exit 1
+fi
 
 echo ""
 echo "Installation complete."
 echo "Restart Claude Code (or open /hooks) to activate notifications."
+echo ""
+echo "=== Configuration ==="
+echo "To customize notification sound:"
+echo "  1. Edit $NOTIFY_DEST"
+echo "  2. Modify the SOUND variable at the top of the file:"
+echo "     - Use built-in sound names: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink"
+echo "     - Or provide full path to custom audio file (aiff, wav, caf formats supported)"
+echo "     - Set to empty string \"\" to disable sound entirely"
+echo ""
+echo "To uninstall, run the uninstall-claude-notify.sh script in the same directory."
