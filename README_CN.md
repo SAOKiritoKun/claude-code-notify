@@ -11,11 +11,12 @@
 
 ## 简介
 
-`claude-code-notify` 挂载到 Claude Code 的 `Stop`（成功）和 `StopFailure`（失败）事件。每当 Claude 完成一个任务（无论成功或失败），系统都会弹出通知，显示最后一条用户消息（最多 200 字符）——即使你已切换到其他窗口，也能第一时间知道任务状态。
+`claude-code-notify` 挂载到 Claude Code 的 `Stop`（成功）、`StopFailure`（失败）和 `PermissionRequest`（权限请求）事件。每当 Claude 需要你的关注时就会弹出系统通知，不用一直守在终端前等待：
 
-成功和失败通知有明显的视觉和音效区分：
-- ✅ **成功**：带绿色对勾的标题和积极提示音
-- ❌ **失败**：带红色叉号的标题和错误提示音
+不同场景的通知有明显的视觉和音效区分：
+- ✅ **成功**：带绿色对勾的标题和积极提示音，任务正常完成时触发
+- ❌ **失败**：带红色叉号的标题和错误提示音，任务执行失败时触发（包含错误详情）
+- 🔐 **权限请求**：带锁头图标的标题和中性提示音，Claude需要你授权操作时触发（显示请求的具体操作内容）
 
 | 平台    | 通知方式 |
 |---------|---------|
@@ -91,6 +92,7 @@ bash mac/uninstall-claude-notify.sh
 默认音效：
 - 成功：`ding.wav`（来自 `C:\Windows\Media\`）
 - 失败：`Windows Error.wav`（来自 `C:\Windows\Media\`）
+- 权限请求：`notify.wav`（来自 `C:\Windows\Media\`）
 
 通过 `settings.json` 钩子命令中的 `-Sound` 参数自定义：
 
@@ -123,6 +125,7 @@ $env:CC_NOTIFY_SOUND = "chord.wav"
 默认音效：
 - 成功：`Funk`（系统内置音效）
 - 失败：`Basso`（系统内置音效）
+- 权限请求：`Glass`（系统内置音效）
 
 通过 `.zshrc` 或 `.bash_profile` 中的 `CC_NOTIFY_SOUND` 环境变量自定义：
 
@@ -156,14 +159,15 @@ export CC_NOTIFY_SOUND=""
 ## 工作原理
 
 1. 安装脚本将通知脚本复制到 `<目标>/.claude/hooks/cc-notify/`
-2. 修改 `<目标>/.claude/settings.json`，注册两个异步钩子：
+2. 修改 `<目标>/.claude/settings.json`，注册三个异步钩子：
    - `Stop` 钩子：任务成功完成时触发
    - `StopFailure` 钩子：任务执行失败时触发（API错误、权限被拒、工具崩溃等）
+   - `PermissionRequest` 钩子：Claude需要用户授权执行操作时触发
 3. 每次事件触发时，通知脚本读取stdin中的JSON载荷：
-   - 自动识别成功/失败状态（通过事件类型或载荷中的`success`字段）
-   - 读取`transcript_path`，从后往前遍历对话记录，找到最后一条用户消息
-   - 显示对应状态的通知标题和音效
-4. 若无法读取对话记录，则回退显示状态对应的默认消息
+   - **成功/失败事件**：识别任务状态，读取对话记录中的最后一条用户消息，显示任务上下文
+   - **权限请求事件**：提取操作类型和详情，显示Claude请求执行的具体动作
+   - 显示对应场景的通知标题、图标和音效
+4. 若载荷解析失败，则回退显示场景对应的默认消息
 
 **安装脚本是幂等的** —— 重复运行只会更新已有的钩子条目，不会重复添加。
 
@@ -175,13 +179,13 @@ export CC_NOTIFY_SOUND=""
 
 ```
 windows/
-├── notify.ps1                    # 通知脚本（Stop/StopFailure 事件时调用）
-├── install-claude-notify.ps1     # 交互式安装脚本（同时注册两个事件钩子）
+├── notify.ps1                    # 通知脚本（Stop/StopFailure/PermissionRequest 事件时调用）
+├── install-claude-notify.ps1     # 交互式安装脚本（同时注册三个事件钩子）
 └── uninstall-claude-notify.ps1   # 交互式卸载脚本（清理所有相关钩子条目）
 
 mac/
-├── notify.sh                     # 通知脚本（Stop/StopFailure 事件时调用）
-├── install-claude-notify.sh      # 交互式安装脚本（同时注册两个事件钩子）
+├── notify.sh                     # 通知脚本（Stop/StopFailure/PermissionRequest 事件时调用）
+├── install-claude-notify.sh      # 交互式安装脚本（同时注册三个事件钩子）
 └── uninstall-claude-notify.sh    # 交互式卸载脚本（清理所有相关钩子条目）
 ```
 

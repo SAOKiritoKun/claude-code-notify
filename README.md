@@ -11,11 +11,12 @@ Language: English | [中文文档](README_CN.md)
 
 ## Overview
 
-`claude-code-notify` hooks into Claude Code's `Stop` (success) and `StopFailure` (failure) events. When Claude finishes a task (whether successful or failed), a system notification pops up showing the last user message (truncated to 200 chars) — so you know exactly which task completed, even if you've switched windows.
+`claude-code-notify` hooks into Claude Code's `Stop` (success), `StopFailure` (failure), and `PermissionRequest` (authorization required) events. You'll get a system notification whenever Claude needs your attention, so you don't have to keep checking the terminal:
 
-Success and failure notifications have distinct visual and audio cues:
-- ✅ **Success**: Green checkmark title with positive notification sound
-- ❌ **Failure**: Red cross title with error notification sound
+Notifications have distinct visual and audio cues for each scenario:
+- ✅ **Success**: Green checkmark title with positive notification sound when a task completes normally
+- ❌ **Failure**: Red cross title with error notification sound when a task fails (includes error details)
+- 🔐 **Permission Request**: Lock icon title with neutral notification sound when Claude needs your approval to perform an operation (shows what action is being requested)
 
 | Platform | Mechanism |
 |----------|-----------|
@@ -93,6 +94,7 @@ Sound plays automatically with each notification, with different defaults for su
 Default sounds:
 - Success: `ding.wav` (from `C:\Windows\Media\`)
 - Failure: `Windows Error.wav` (from `C:\Windows\Media\`)
+- Permission request: `notify.wav` (from `C:\Windows\Media\`)
 
 Customize via the `-Sound` parameter in the hook command in `settings.json`:
 
@@ -125,6 +127,7 @@ $env:CC_NOTIFY_SOUND = "chord.wav"
 Default sounds:
 - Success: `Funk` (built-in system sound)
 - Failure: `Basso` (built-in system sound)
+- Permission request: `Glass` (built-in system sound)
 
 Customize via the `CC_NOTIFY_SOUND` environment variable in `.zshrc` or `.bash_profile`:
 
@@ -158,14 +161,15 @@ Or set it inline in the hook command in `settings.json`:
 ## How It Works
 
 1. The installer copies the notify script into `<target>/.claude/hooks/cc-notify/`
-2. It patches `<target>/.claude/settings.json` to register two async hooks:
+2. It patches `<target>/.claude/settings.json` to register three async hooks:
    - `Stop` hook: For successful task completion
    - `StopFailure` hook: For execution failures (API errors, permission denials, tool crashes, etc.)
+   - `PermissionRequest` hook: For when Claude needs user approval to perform an operation
 3. On each event, the notify script reads the JSON payload from stdin:
-   - Detects success/failure state (either via event type or `success` field in payload)
-   - Reads `transcript_path` from the payload, walks the transcript backwards to find the last user message
-   - Displays appropriate notification with status-specific title and sound
-4. Falls back to status-specific default message if the transcript is unavailable
+   - **Success/Failure events**: Detects state, reads the last user message from transcript, shows task context
+   - **Permission request events**: Extracts operation type and details, shows what action Claude is requesting approval for
+   - Displays appropriate notification with scenario-specific title, icon, and sound
+4. Falls back to scenario-specific default messages if payload parsing fails
 
 **The installer is idempotent** — re-running it updates the existing hook entry rather than duplicating it.
 
@@ -177,13 +181,13 @@ Or set it inline in the hook command in `settings.json`:
 
 ```
 windows/
-├── notify.ps1                    # Notification script (invoked on Stop/StopFailure events)
-├── install-claude-notify.ps1     # Interactive installer (registers both event hooks)
+├── notify.ps1                    # Notification script (invoked on Stop/StopFailure/PermissionRequest events)
+├── install-claude-notify.ps1     # Interactive installer (registers all three event hooks)
 └── uninstall-claude-notify.ps1   # Interactive uninstaller (cleans up all hook entries)
 
 mac/
-├── notify.sh                     # Notification script (invoked on Stop/StopFailure events)
-├── install-claude-notify.sh      # Interactive installer (registers both event hooks)
+├── notify.sh                     # Notification script (invoked on Stop/StopFailure/PermissionRequest events)
+├── install-claude-notify.sh      # Interactive installer (registers all three event hooks)
 └── uninstall-claude-notify.sh    # Interactive uninstaller (cleans up all hook entries)
 ```
 

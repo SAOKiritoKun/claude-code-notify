@@ -116,10 +116,11 @@ function Remove-CcNotify {
             return $found
         }
 
-        # Process both Stop and StopFailure events
+        # Process Stop, StopFailure and PermissionRequest events
         if ($json.PSObject.Properties['hooks']) {
             $totalFound += Remove-Event-Hooks -Json $json -EventName "Stop"
             $totalFound += Remove-Event-Hooks -Json $json -EventName "StopFailure"
+            $totalFound += Remove-Event-Hooks -Json $json -EventName "PermissionRequest"
 
             if ($totalFound -gt 0) {
                 # If hooks object is now empty, remove it entirely

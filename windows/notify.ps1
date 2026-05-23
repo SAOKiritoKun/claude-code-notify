@@ -1,19 +1,23 @@
 param(
     [string]$Title = "",
     [string]$Sound = "",
-    [switch]$Failed
+    [switch]$Failed,
+    [switch]$Permission
 )
 
 # Default titles and messages
 $TitleSuccess = "✅ Claude Code Task Done"
 $TitleFailed = "❌ Claude Code Task Failed"
+$TitlePermission = "🔐 Claude Code Permission Request"
 $MessageSuccess = "Task completed"
 $MessageFailed = "Task execution failed"
+$MessagePermission = "Permission request requires your approval"
 
 # Sound: filename under C:\Windows\Media\ or full path. Empty string to disable.
 # Priority: -Sound param > CC_NOTIFY_SOUND env var > default sound (based on status)
 $defaultSoundSuccess = "ding.wav"
 $defaultSoundFailed = "Windows Error.wav"  # 失败时默认使用系统错误音效
+$defaultSoundPermission = "notify.wav"     # 权限请求时使用中性提示音
 
 # 音效优先级处理
 $userSpecifiedSound = $PSBoundParameters.ContainsKey('Sound')
@@ -35,10 +39,12 @@ if ([Console]::IsInputRedirected) {
     }
 }
 
-# 自动检测失败状态，如果没有手动指定-Failed参数
-if (-not $Failed -and $json -ne $null) {
+# 自动检测事件类型，如果没有手动指定参数
+if (-not $Failed -and -not $Permission -and $json -ne $null) {
     try {
-        if ($json.PSObject.Properties['success'] -and $json.success -eq $false) {
+        if ($json.PSObject.Properties['event_type'] -and $json.event_type -eq "PermissionRequest") {
+            $Permission = $true
+        } elseif ($json.PSObject.Properties['success'] -and $json.success -eq $false) {
             $Failed = $true
         }
     } catch {
@@ -48,7 +54,9 @@ if (-not $Failed -and $json -ne $null) {
 
 # 设置标题和默认音效
 if (-not $Title) {
-    if ($Failed) {
+    if ($Permission) {
+        $Title = $TitlePermission
+    } elseif ($Failed) {
         $Title = $TitleFailed
     } else {
         $Title = $TitleSuccess
@@ -57,7 +65,9 @@ if (-not $Title) {
 
 # 如果没有指定音效（用户没传参数也没有环境变量），根据状态设置默认音效
 if (-not $userSpecifiedSound -and $Sound -eq "") {
-    if ($Failed) {
+    if ($Permission) {
+        $Sound = $defaultSoundPermission
+    } elseif ($Failed) {
         $Sound = $defaultSoundFailed
     } else {
         $Sound = $defaultSoundSuccess
@@ -94,6 +104,60 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
             }
         }
 
+        # 提取权限请求信息（如果是权限事件）
+        $permissionInfo = ""
+        if ($Permission) {
+            try {
+                # 权限类型映射
+                $typeMap = @{
+                    "bash_run" = "🖥️ 运行命令"
+                    "file_edit" = "📝 编辑文件"
+                    "file_read" = "📄 读取文件"
+                    "network_access" = "🌐 网络请求"
+                    "tool_call" = "🔧 调用工具"
+                }
+
+                $permType = if ($json.PSObject.Properties['permission_type']) { $json.permission_type.ToString() } else { "" }
+                $operation = if ($json.PSObject.Properties['operation']) { $json.operation } else { $null }
+
+                $desc = ""
+                if ($operation -ne $null -and $operation -is [PSCustomObject]) {
+                    # 优先获取操作描述
+                    if ($operation.PSObject.Properties['description']) {
+                        $desc = $operation.description.ToString()
+                    } else {
+                        # 没有描述则尝试取工具+命令/路径
+                        $tool = if ($operation.PSObject.Properties['tool']) { $operation.tool.ToString() } else { "" }
+                        if ($tool -eq "Bash" -and $operation.PSObject.Properties['command']) {
+                            $desc = $operation.command.ToString()
+                        } elseif (($tool -eq "Edit" -or $tool -eq "Write") -and $operation.PSObject.Properties['file_path']) {
+                            $desc = $operation.file_path.ToString()
+                        } elseif ($tool -eq "Read" -and $operation.PSObject.Properties['file_path']) {
+                            $desc = $operation.file_path.ToString()
+                        }
+                    }
+                }
+
+                # 组合显示内容
+                if ($typeMap.ContainsKey($permType)) {
+                    $prefix = $typeMap[$permType]
+                } else {
+                    $prefix = "🔧 执行操作"
+                }
+
+                if ($desc) {
+                    $permissionInfo = "$prefix`: $desc"
+                    if ($permissionInfo.Length -gt 150) {
+                        $permissionInfo = $permissionInfo.Substring(0, 147) + "..."
+                    }
+                } else {
+                    $permissionInfo = "Claude requires your authorization to proceed"
+                }
+            } catch {
+                $permissionInfo = "Claude requires your authorization to proceed"
+            }
+        }
+
         # 提取错误信息（如果是失败事件）
         $errorInfo = ""
         if ($Failed -and $json.PSObject.Properties['error']) {
@@ -115,7 +179,16 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
             }
         }
 
-        if ($userMsg) {
+        # 权限请求优先显示权限信息
+        if ($Permission) {
+            if ($permissionInfo) {
+                $Message = $permissionInfo
+            } else {
+                $Message = $MessagePermission
+            }
+            # 添加提示行
+            $Message = "$Message`n$MessagePermission"
+        } elseif ($userMsg) {
             $Message = if ($userMsg.Length -gt 200) { $userMsg.Substring(0, 197) + '...' } else { $userMsg }
         } else {
             $Message = if ($Failed) { $MessageFailed } else { $MessageSuccess }

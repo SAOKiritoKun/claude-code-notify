@@ -22,15 +22,18 @@ mac/
 ## How It Works
 
 1. The installer copies `notify.ps1` / `notify.sh` into `~/.claude/hooks/cc-notify/` (global) or `.claude/hooks/cc-notify/` (project-local).
-2. It patches `settings.json` to register two async hooks (`async: true`, `timeout: 10`):
+2. It patches `settings.json` to register three async hooks (`async: true`, `timeout: 10`):
    - `Stop` hook: Triggered when a task completes successfully, calls the notify script normally
    - `StopFailure` hook: Triggered when a task execution fails, calls the notify script with `--failed` flag
+   - `PermissionRequest` hook: Triggered when Claude requests user permission to perform an operation, calls the notify script with `--permission` flag
 3. On each event, the notify script reads the JSON payload from stdin:
    - For success events: Shows ✅ "Claude Code Task Done" title with success-themed sound
-   - For failure events: Shows ❌ "Claude Code Task Failed" title with error-themed sound
-   - Reads `transcript_path` from the payload, walks the transcript backwards to find the last user message, and shows it as the notification body
-   - Windows: Uses WinRT `ToastNotificationManager` for toasts, plays sound via `System.Media.SoundPlayer`. Accepts `-Sound` parameter (filename under `C:\Windows\Media\` or full path; empty string to disable). Defaults to `ding.wav` for success, `Windows Error.wav` for failure.
-   - macOS: `osascript display notification`. Sound controlled via `CC_NOTIFY_SOUND` env var (built-in sound name or file path; empty string to disable). Defaults to `Funk` for success, `Basso` for failure.
+   - For failure events: Shows ❌ "Claude Code Task Failed" title with error-themed sound, includes error details if available
+   - For permission request events: Shows 🔐 "Claude Code Permission Request" title with neutral notification sound, displays the requested operation type and details
+   - Success/failure events: Read `transcript_path` from the payload, walk the transcript backwards to find the last user message as the notification body
+   - Permission events: Extract permission type and operation details, display user-friendly action descriptions with appropriate icons (🖥️ for commands, 📝 for file edits, 📄 for file reads, 🌐 for network requests)
+   - Windows: Uses WinRT `ToastNotificationManager` for toasts, plays sound via `System.Media.SoundPlayer`. Defaults: success `ding.wav`, failure `Windows Error.wav`, permission `notify.wav`.
+   - macOS: `osascript display notification`. Sound controlled via `CC_NOTIFY_SOUND` env var (built-in sound name or file path; empty string to disable). Defaults: success `Funk`, failure `Basso`, permission `Glass`.
 
 ## Key Constraints
 
@@ -40,3 +43,4 @@ mac/
 - Notification message is capped at 200 characters.
 - Windows installer uses a custom `Format-Json` function for pretty-printing (PowerShell's `ConvertTo-Json` output is not always well-formatted).
 - macOS installer uses Python 3 for both JSON patching and transcript parsing; Windows uses native PowerShell JSON cmdlets.
+- **Documentation synchronization**: Any modification, addition, or deletion of features MUST be accompanied by corresponding updates to `README.md` (English) and `README_CN.md` (Chinese) to keep documentation consistent with functionality.

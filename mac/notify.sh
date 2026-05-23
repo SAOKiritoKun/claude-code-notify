@@ -3,21 +3,29 @@
 
 TITLE_SUCCESS="✅ Claude Code Task Done"
 TITLE_FAILED="❌ Claude Code Task Failed"
+TITLE_PERMISSION="🔐 Claude Code Permission Request"
 MESSAGE_SUCCESS="Task completed"
 MESSAGE_FAILED="Task execution failed"
+MESSAGE_PERMISSION="Permission request requires your approval"
 # 音效配置：可以是内置音效名或自定义音效文件路径
 # 内置音效列表：Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink
 # 自定义音效支持格式：aiff, wav, caf
 # 设置为空字符串 "" 可禁用音效
 SOUND_SUCCESS="${CC_NOTIFY_SOUND:-Funk}"
 SOUND_FAILED="${CC_NOTIFY_SOUND:-Basso}"  # 失败时默认使用不同的音效
+SOUND_PERMISSION="${CC_NOTIFY_SOUND:-Glass}"  # 权限请求时使用中性提示音
 
 # 解析命令行参数
 IS_FAILED=""
+IS_PERMISSION=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --failed)
             IS_FAILED="1"
+            shift
+            ;;
+        --permission)
+            IS_PERMISSION="1"
             shift
             ;;
         *)
@@ -28,7 +36,11 @@ done
 
 if [ -t 0 ]; then
     # No stdin
-    if [ -z "$IS_FAILED" ]; then
+    if [ -n "$IS_PERMISSION" ]; then
+        TITLE="$TITLE_PERMISSION"
+        MESSAGE="$MESSAGE_PERMISSION"
+        SOUND="$SOUND_PERMISSION"
+    elif [ -z "$IS_FAILED" ]; then
         TITLE="$TITLE_SUCCESS"
         MESSAGE="$MESSAGE_SUCCESS"
         SOUND="$SOUND_SUCCESS"
@@ -40,9 +52,20 @@ if [ -t 0 ]; then
 else
     RAW=$(cat)
 
-    # 检测事件是否成功
-    if [ -z "$IS_FAILED" ]; then
-        SUCCESS=$(echo "$RAW" | python3 -c "
+    # 检测事件类型
+    if [ -z "$IS_PERMISSION" ]; then
+        EVENT_TYPE=$(echo "$RAW" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(d.get('event_type', ''))
+except:
+    print('')
+" 2>/dev/null)
+        if [ "$EVENT_TYPE" = "PermissionRequest" ]; then
+            IS_PERMISSION="1"
+        elif [ -z "$IS_FAILED" ]; then
+            SUCCESS=$(echo "$RAW" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -50,13 +73,17 @@ try:
 except:
     print('true')
 " 2>/dev/null)
-        if [ "$SUCCESS" = "false" ]; then
-            IS_FAILED="1"
+            if [ "$SUCCESS" = "false" ]; then
+                IS_FAILED="1"
+            fi
         fi
     fi
 
     # 设置标题和音效
-    if [ -z "$IS_FAILED" ]; then
+    if [ -n "$IS_PERMISSION" ]; then
+        TITLE="$TITLE_PERMISSION"
+        SOUND="$SOUND_PERMISSION"
+    elif [ -z "$IS_FAILED" ]; then
         TITLE="$TITLE_SUCCESS"
         SOUND="$SOUND_SUCCESS"
     else
@@ -87,6 +114,56 @@ try:
     print(str(error)[:100])  # 限制错误信息长度
 except:
     print('')
+" 2>/dev/null)
+    fi
+
+    # 提取权限请求信息（如果是权限事件）
+    PERMISSION_INFO=""
+    if [ -n "$IS_PERMISSION" ]; then
+        PERMISSION_INFO=$(echo "$RAW" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+
+    # 权限类型映射
+    type_map = {
+        'bash_run': '🖥️ 运行命令',
+        'file_edit': '📝 编辑文件',
+        'file_read': '📄 读取文件',
+        'network_access': '🌐 网络请求',
+        'tool_call': '🔧 调用工具'
+    }
+
+    perm_type = d.get('permission_type', '')
+    operation = d.get('operation', {})
+
+    # 优先获取操作描述
+    if isinstance(operation, dict):
+        desc = operation.get('description', '')
+        if not desc:
+            # 没有描述则尝试取工具+命令/路径
+            tool = operation.get('tool', '')
+            if tool == 'Bash' and operation.get('command'):
+                desc = operation.get('command', '')
+            elif (tool == 'Edit' or tool == 'Write') and operation.get('file_path'):
+                desc = operation.get('file_path', '')
+            elif (tool == 'Read') and operation.get('file_path'):
+                desc = operation.get('file_path', '')
+
+    # 组合显示内容
+    if perm_type in type_map:
+        prefix = type_map[perm_type]
+    else:
+        prefix = '🔧 执行操作'
+
+    if desc:
+        result = f'{prefix}: {desc}'
+    else:
+        result = 'Claude requires your authorization to proceed'
+
+    print(result[:150])  # 限制长度
+except:
+    print('Claude requires your authorization to proceed')
 " 2>/dev/null)
     fi
 
@@ -125,7 +202,17 @@ if len(user_msg) > 200:
 print(user_msg)
 EOF
 )
-        if [ -n "$USER_MSG" ]; then
+        # 权限请求优先显示权限信息
+        if [ -n "$IS_PERMISSION" ]; then
+            if [ -n "$PERMISSION_INFO" ]; then
+                MESSAGE="$PERMISSION_INFO"
+            else
+                MESSAGE="$MESSAGE_PERMISSION"
+            fi
+            # 添加提示行
+            MESSAGE="$MESSAGE
+$MESSAGE_PERMISSION"
+        elif [ -n "$USER_MSG" ]; then
             MESSAGE="$USER_MSG"
         else
             if [ -z "$IS_FAILED" ]; then

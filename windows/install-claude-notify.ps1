@@ -88,7 +88,7 @@ if (-not $json.PSObject.Properties['hooks']) {
     $json | Add-Member -MemberType NoteProperty -Name 'hooks' -Value ([PSCustomObject]@{})
 }
 
-# Create hook entries for both Stop (success) and StopFailure (failed) events
+# Create hook entries for Stop (success), StopFailure (failed), and PermissionRequest events
 $hookEntrySuccess = [PSCustomObject]@{
     type    = "command"
     command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`""
@@ -101,8 +101,15 @@ $hookEntryFailed = [PSCustomObject]@{
     timeout = 10
     async   = $true
 }
+$hookEntryPermission = [PSCustomObject]@{
+    type    = "command"
+    command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`" -Permission"
+    timeout = 10
+    async   = $true  # 权限通知是异步的，不阻塞审批流程
+}
 $stopBlock = [PSCustomObject]@{ hooks = @($hookEntrySuccess) }
 $stopFailureBlock = [PSCustomObject]@{ hooks = @($hookEntryFailed) }
+$permissionBlock = [PSCustomObject]@{ hooks = @($hookEntryPermission) }
 
 # Function to add or update hook for a specific event
 function Add-Or-Update-Hook {
@@ -139,9 +146,10 @@ function Add-Or-Update-Hook {
     }
 }
 
-# Add both events
+# Add all three events
 Add-Or-Update-Hook -Json $json -EventName "Stop" -HookBlock $stopBlock
 Add-Or-Update-Hook -Json $json -EventName "StopFailure" -HookBlock $stopFailureBlock
+Add-Or-Update-Hook -Json $json -EventName "PermissionRequest" -HookBlock $permissionBlock
 
 $pretty = Format-Json ($json | ConvertTo-Json -Depth 20 -Compress)
 [System.IO.File]::WriteAllText($settingsFile, $pretty, [System.Text.Encoding]::UTF8)

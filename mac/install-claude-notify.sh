@@ -100,7 +100,7 @@ try:
     if "hooks" not in data or not isinstance(data["hooks"], dict):
         data["hooks"] = {}
 
-    # Create hook entries for both Stop (success) and StopFailure (failed) events
+    # Create hook entries for Stop (success), StopFailure (failed), and PermissionRequest events
     hook_entry_success = {
         "type":    "command",
         "command": f"bash \"{notify_dest}\"",
@@ -113,8 +113,15 @@ try:
         "timeout": 10,
         "async":   True
     }
+    hook_entry_permission = {
+        "type":    "command",
+        "command": f"bash \"{notify_dest}\" --permission",
+        "timeout": 10,
+        "async":   True  # 权限通知是异步的，不阻塞审批流程
+    }
     stop_block = {"hooks": [hook_entry_success]}
     stop_failure_block = {"hooks": [hook_entry_failed]}
+    permission_block = {"hooks": [hook_entry_permission]}
 
     # Process Stop event
     stop_hooks = data["hooks"].get("Stop", [])
@@ -163,6 +170,30 @@ try:
     else:
         data["hooks"]["StopFailure"] = [stop_failure_block]
         print("[OK] Created new StopFailure hook configuration")
+
+    # Process PermissionRequest event
+    permission_hooks = data["hooks"].get("PermissionRequest", [])
+    if not isinstance(permission_hooks, list):
+        permission_hooks = []
+
+    # Find existing cc-notify entry index in PermissionRequest
+    existing_index_permission = -1
+    for i, block in enumerate(permission_hooks):
+        if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
+            for h in block["hooks"]:
+                if isinstance(h, dict) and "command" in h and "cc-notify" in h["command"]:
+                    existing_index_permission = i
+                    break
+
+    if existing_index_permission >= 0:
+        permission_hooks[existing_index_permission] = permission_block
+        print("[OK] Updated existing cc-notify PermissionRequest hook")
+    elif permission_hooks:
+        permission_hooks.append(permission_block)
+        print("[OK] Added cc-notify PermissionRequest hook to existing hooks")
+    else:
+        data["hooks"]["PermissionRequest"] = [permission_block]
+        print("[OK] Created new PermissionRequest hook configuration")
 
     # Write back the modified settings
     with open(settings_file, "w", encoding="utf-8") as f:

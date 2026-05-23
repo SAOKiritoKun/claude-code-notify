@@ -130,8 +130,8 @@ try:
     total_modified = False
     total_found = 0
 
-    # Process both Stop and StopFailure events
-    for event in ["Stop", "StopFailure"]:
+    # Process Stop, StopFailure and PermissionRequest events
+    for event in ["Stop", "StopFailure", "PermissionRequest"]:
         data, modified, found = remove_cc_notify_hooks(data, event)
         if modified:
             total_modified = True
