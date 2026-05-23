@@ -27,11 +27,11 @@ mac/
    - `StopFailure` hook: Triggered when a task execution fails, calls the notify script with `--failed` flag
    - `PermissionRequest` hook: Triggered when Claude requests user permission to perform an operation, calls the notify script with `--permission` flag
 3. On each event, the notify script reads the JSON payload from stdin:
-   - For success events: Shows ✅ "Claude Code Task Done" title with success-themed sound
-   - For failure events: Shows ❌ "Claude Code Task Failed" title with error-themed sound, includes error details if available
-   - For permission request events: Shows 🔐 "Claude Code Permission Request" title with neutral notification sound, displays the requested operation type and details
+   - For success events: Shows "Claude Code Task Done" title with success-themed sound
+   - For failure events: Shows "Claude Code Task Failed" title with error-themed sound, includes error details if available
+   - For permission request events: Shows "Claude Code Permission Request" title with neutral notification sound, displays the requested operation type and details
    - Success/failure events: Read `transcript_path` from the payload, walk the transcript backwards to find the last user message as the notification body
-   - Permission events: Extract permission type and operation details, display user-friendly action descriptions with appropriate icons (🖥️ for commands, 📝 for file edits, 📄 for file reads, 🌐 for network requests)
+   - Permission events: Extract permission type and operation details, display user-friendly action descriptions with type prefixes ([Command] for commands, [Edit] for file edits, [Read] for file reads, [Network] for network requests)
    - Windows: Uses WinRT `ToastNotificationManager` for toasts, plays sound via `System.Media.SoundPlayer`. Defaults: success `ding.wav`, failure `Windows Error.wav`, permission `notify.wav`.
    - macOS: `osascript display notification`. Sound controlled via `CC_NOTIFY_SOUND` env var (built-in sound name or file path; empty string to disable). Defaults: success `Funk`, failure `Basso`, permission `Glass`.
 

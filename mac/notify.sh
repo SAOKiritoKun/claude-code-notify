@@ -1,9 +1,9 @@
 #!/bin/bash
 # Claude Code Turn Notification - macOS
 
-TITLE_SUCCESS="✅ Claude Code Task Done"
-TITLE_FAILED="❌ Claude Code Task Failed"
-TITLE_PERMISSION="🔐 Claude Code Permission Request"
+TITLE_SUCCESS="Claude Code Task Done"
+TITLE_FAILED="Claude Code Task Failed"
+TITLE_PERMISSION="Claude Code Permission Request"
 MESSAGE_SUCCESS="Task completed"
 MESSAGE_FAILED="Task execution failed"
 MESSAGE_PERMISSION="Permission request requires your approval"
@@ -127,11 +127,11 @@ try:
 
     # 权限类型映射
     type_map = {
-        'bash_run': '🖥️ 运行命令',
-        'file_edit': '📝 编辑文件',
-        'file_read': '📄 读取文件',
-        'network_access': '🌐 网络请求',
-        'tool_call': '🔧 调用工具'
+        'bash_run': '[Command]',
+        'file_edit': '[Edit]',
+        'file_read': '[Read]',
+        'network_access': '[Network]',
+        'tool_call': '[Tool]'
     }
 
     perm_type = d.get('permission_type', '')
@@ -154,10 +154,10 @@ try:
     if perm_type in type_map:
         prefix = type_map[perm_type]
     else:
-        prefix = '🔧 执行操作'
+        prefix = '[Operation]'
 
     if desc:
-        result = f'{prefix}: {desc}'
+        result = f'{prefix} {desc}'
     else:
         result = 'Claude requires your authorization to proceed'
 
@@ -225,7 +225,7 @@ $MESSAGE_PERMISSION"
         # 失败时添加错误信息
         if [ -n "$IS_FAILED" ] && [ -n "$ERROR_INFO" ]; then
             MESSAGE="$MESSAGE
-⚠️ Error: $ERROR_INFO"
+Error: $ERROR_INFO"
             # 总长度限制在300字符以内
             if [ ${#MESSAGE} -gt 300 ]; then
                 MESSAGE="${MESSAGE:0:297}..."

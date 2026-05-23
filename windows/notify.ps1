@@ -6,9 +6,9 @@ param(
 )
 
 # Default titles and messages
-$TitleSuccess = "✅ Claude Code Task Done"
-$TitleFailed = "❌ Claude Code Task Failed"
-$TitlePermission = "🔐 Claude Code Permission Request"
+$TitleSuccess = "Claude Code Task Done"
+$TitleFailed = "Claude Code Task Failed"
+$TitlePermission = "Claude Code Permission Request"
 $MessageSuccess = "Task completed"
 $MessageFailed = "Task execution failed"
 $MessagePermission = "Permission request requires your approval"
@@ -110,11 +110,11 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
             try {
                 # 权限类型映射
                 $typeMap = @{
-                    "bash_run" = "🖥️ 运行命令"
-                    "file_edit" = "📝 编辑文件"
-                    "file_read" = "📄 读取文件"
-                    "network_access" = "🌐 网络请求"
-                    "tool_call" = "🔧 调用工具"
+                    "bash_run" = "[Command]"
+                    "file_edit" = "[Edit]"
+                    "file_read" = "[Read]"
+                    "network_access" = "[Network]"
+                    "tool_call" = "[Tool]"
                 }
 
                 $permType = if ($json.PSObject.Properties['permission_type']) { $json.permission_type.ToString() } else { "" }
@@ -142,11 +142,11 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
                 if ($typeMap.ContainsKey($permType)) {
                     $prefix = $typeMap[$permType]
                 } else {
-                    $prefix = "🔧 执行操作"
+                    $prefix = "[Operation]"
                 }
 
                 if ($desc) {
-                    $permissionInfo = "$prefix`: $desc"
+                    $permissionInfo = "$prefix $desc"
                     if ($permissionInfo.Length -gt 150) {
                         $permissionInfo = $permissionInfo.Substring(0, 147) + "..."
                     }
@@ -196,7 +196,7 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
 
         # 失败时添加错误信息
         if ($Failed -and $errorInfo) {
-            $Message = "$Message`n⚠️ Error: $errorInfo"
+            $Message = "$Message`nError: $errorInfo"
             if ($Message.Length -gt 300) {
                 $Message = $Message.Substring(0, 297) + "..."
             }

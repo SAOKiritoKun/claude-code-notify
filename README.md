@@ -13,10 +13,10 @@ Language: English | [中文文档](README_CN.md)
 
 `claude-code-notify` hooks into Claude Code's `Stop` (success), `StopFailure` (failure), and `PermissionRequest` (authorization required) events. You'll get a system notification whenever Claude needs your attention, so you don't have to keep checking the terminal:
 
-Notifications have distinct visual and audio cues for each scenario:
-- ✅ **Success**: Green checkmark title with positive notification sound when a task completes normally
-- ❌ **Failure**: Red cross title with error notification sound when a task fails (includes error details)
-- 🔐 **Permission Request**: Lock icon title with neutral notification sound when Claude needs your approval to perform an operation (shows what action is being requested)
+Notifications have distinct titles and audio cues for each scenario:
+- **Success**: "Claude Code Task Done" title with positive notification sound when a task completes normally
+- **Failure**: "Claude Code Task Failed" title with error notification sound when a task fails (includes error details)
+- **Permission Request**: "Claude Code Permission Request" title with neutral notification sound when Claude needs your approval to perform an operation (shows what action is being requested)
 
 | Platform | Mechanism |
 |----------|-----------|
@@ -167,7 +167,7 @@ Or set it inline in the hook command in `settings.json`:
    - `PermissionRequest` hook: For when Claude needs user approval to perform an operation
 3. On each event, the notify script reads the JSON payload from stdin:
    - **Success/Failure events**: Detects state, reads the last user message from transcript, shows task context
-   - **Permission request events**: Extracts operation type and details, shows what action Claude is requesting approval for
+   - **Permission request events**: Extracts operation type and details, shows what action Claude is requesting approval for, with type prefixes ([Command] for shell commands, [Edit] for file modifications, [Read] for file access, [Network] for external requests)
    - Displays appropriate notification with scenario-specific title, icon, and sound
 4. Falls back to scenario-specific default messages if payload parsing fails
 
