@@ -11,7 +11,11 @@ Language: English | [中文文档](README_CN.md)
 
 ## Overview
 
-`claude-code-notify` hooks into Claude Code's `Stop` event. When Claude finishes a turn, a system notification pops up showing the last user message (truncated to 200 chars) — so you know exactly which task completed, even if you've switched windows.
+`claude-code-notify` hooks into Claude Code's `Stop` (success) and `StopFailure` (failure) events. When Claude finishes a task (whether successful or failed), a system notification pops up showing the last user message (truncated to 200 chars) — so you know exactly which task completed, even if you've switched windows.
+
+Success and failure notifications have distinct visual and audio cues:
+- ✅ **Success**: Green checkmark title with positive notification sound
+- ❌ **Failure**: Red cross title with error notification sound
 
 | Platform | Mechanism |
 |----------|-----------|
@@ -82,11 +86,13 @@ Only `cc-notify` hook entries are removed. All other hooks in `settings.json` ar
 
 ### Sound
 
-Sound plays automatically with each notification. This is optional — you can change the sound or disable it entirely.
+Sound plays automatically with each notification, with different defaults for success and failure states. This is optional — you can change the sound or disable it entirely.
 
 #### Windows
 
-Default sound: `ding.wav` (from `C:\Windows\Media\`).
+Default sounds:
+- Success: `ding.wav` (from `C:\Windows\Media\`)
+- Failure: `Windows Error.wav` (from `C:\Windows\Media\`)
 
 Customize via the `-Sound` parameter in the hook command in `settings.json`:
 
@@ -116,7 +122,9 @@ $env:CC_NOTIFY_SOUND = "chord.wav"
 
 #### macOS
 
-Default sound: `Funk` (built-in system sound).
+Default sounds:
+- Success: `Funk` (built-in system sound)
+- Failure: `Basso` (built-in system sound)
 
 Customize via the `CC_NOTIFY_SOUND` environment variable in `.zshrc` or `.bash_profile`:
 
@@ -150,9 +158,14 @@ Or set it inline in the hook command in `settings.json`:
 ## How It Works
 
 1. The installer copies the notify script into `<target>/.claude/hooks/cc-notify/`
-2. It patches `<target>/.claude/settings.json` to register an async `Stop` hook
-3. On each `Stop` event, the notify script reads `transcript_path` from the JSON payload, walks the transcript backwards to find the last user message, and displays it as the notification body
-4. Falls back to `"Task completed"` if the transcript is unavailable
+2. It patches `<target>/.claude/settings.json` to register two async hooks:
+   - `Stop` hook: For successful task completion
+   - `StopFailure` hook: For execution failures (API errors, permission denials, tool crashes, etc.)
+3. On each event, the notify script reads the JSON payload from stdin:
+   - Detects success/failure state (either via event type or `success` field in payload)
+   - Reads `transcript_path` from the payload, walks the transcript backwards to find the last user message
+   - Displays appropriate notification with status-specific title and sound
+4. Falls back to status-specific default message if the transcript is unavailable
 
 **The installer is idempotent** — re-running it updates the existing hook entry rather than duplicating it.
 
@@ -164,14 +177,14 @@ Or set it inline in the hook command in `settings.json`:
 
 ```
 windows/
-├── notify.ps1                    # Notification script (invoked on Stop)
-├── install-claude-notify.ps1     # Interactive installer
-└── uninstall-claude-notify.ps1   # Interactive uninstaller
+├── notify.ps1                    # Notification script (invoked on Stop/StopFailure events)
+├── install-claude-notify.ps1     # Interactive installer (registers both event hooks)
+└── uninstall-claude-notify.ps1   # Interactive uninstaller (cleans up all hook entries)
 
 mac/
-├── notify.sh                     # Notification script (invoked on Stop)
-├── install-claude-notify.sh      # Interactive installer
-└── uninstall-claude-notify.sh    # Interactive uninstaller
+├── notify.sh                     # Notification script (invoked on Stop/StopFailure events)
+├── install-claude-notify.sh      # Interactive installer (registers both event hooks)
+└── uninstall-claude-notify.sh    # Interactive uninstaller (cleans up all hook entries)
 ```
 
 ---

@@ -1,19 +1,68 @@
 #!/bin/bash
 # Claude Code Turn Notification - macOS
 
-TITLE="Claude Code Task Done"
-MESSAGE="Task completed"
+TITLE_SUCCESS="✅ Claude Code Task Done"
+TITLE_FAILED="❌ Claude Code Task Failed"
+MESSAGE_SUCCESS="Task completed"
+MESSAGE_FAILED="Task execution failed"
 # 音效配置：可以是内置音效名或自定义音效文件路径
 # 内置音效列表：Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink
 # 自定义音效支持格式：aiff, wav, caf
 # 设置为空字符串 "" 可禁用音效
-SOUND="${CC_NOTIFY_SOUND:-Funk}"
+SOUND_SUCCESS="${CC_NOTIFY_SOUND:-Funk}"
+SOUND_FAILED="${CC_NOTIFY_SOUND:-Basso}"  # 失败时默认使用不同的音效
+
+# 解析命令行参数
+IS_FAILED=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --failed)
+            IS_FAILED="1"
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 if [ -t 0 ]; then
     # No stdin
-    MESSAGE="(no input)"
+    if [ -z "$IS_FAILED" ]; then
+        TITLE="$TITLE_SUCCESS"
+        MESSAGE="$MESSAGE_SUCCESS"
+        SOUND="$SOUND_SUCCESS"
+    else
+        TITLE="$TITLE_FAILED"
+        MESSAGE="$MESSAGE_FAILED"
+        SOUND="$SOUND_FAILED"
+    fi
 else
     RAW=$(cat)
+
+    # 检测事件是否成功
+    if [ -z "$IS_FAILED" ]; then
+        SUCCESS=$(echo "$RAW" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(str(d.get('success', True)).lower())
+except:
+    print('true')
+" 2>/dev/null)
+        if [ "$SUCCESS" = "false" ]; then
+            IS_FAILED="1"
+        fi
+    fi
+
+    # 设置标题和音效
+    if [ -z "$IS_FAILED" ]; then
+        TITLE="$TITLE_SUCCESS"
+        SOUND="$SOUND_SUCCESS"
+    else
+        TITLE="$TITLE_FAILED"
+        SOUND="$SOUND_FAILED"
+    fi
 
     TRANSCRIPT_PATH=$(echo "$RAW" | python3 -c "
 import sys, json
@@ -23,6 +72,23 @@ try:
 except:
     print('')
 " 2>/dev/null)
+
+    # 提取错误信息（如果是失败事件）
+    ERROR_INFO=""
+    if [ -n "$IS_FAILED" ]; then
+        ERROR_INFO=$(echo "$RAW" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    error = d.get('error', '')
+    if isinstance(error, dict):
+        # 处理错误对象，优先取message/reason字段
+        error = error.get('message', error.get('reason', str(error)))
+    print(str(error)[:100])  # 限制错误信息长度
+except:
+    print('')
+" 2>/dev/null)
+    fi
 
     if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
         USER_MSG=$(python3 - "$TRANSCRIPT_PATH" <<'EOF'
@@ -61,6 +127,28 @@ EOF
 )
         if [ -n "$USER_MSG" ]; then
             MESSAGE="$USER_MSG"
+        else
+            if [ -z "$IS_FAILED" ]; then
+                MESSAGE="$MESSAGE_SUCCESS"
+            else
+                MESSAGE="$MESSAGE_FAILED"
+            fi
+        fi
+
+        # 失败时添加错误信息
+        if [ -n "$IS_FAILED" ] && [ -n "$ERROR_INFO" ]; then
+            MESSAGE="$MESSAGE
+⚠️ Error: $ERROR_INFO"
+            # 总长度限制在300字符以内
+            if [ ${#MESSAGE} -gt 300 ]; then
+                MESSAGE="${MESSAGE:0:297}..."
+            fi
+        fi
+    else
+        if [ -z "$IS_FAILED" ]; then
+            MESSAGE="$MESSAGE_SUCCESS"
+        else
+            MESSAGE="$MESSAGE_FAILED"
         fi
     fi
 fi

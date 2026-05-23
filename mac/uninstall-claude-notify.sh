@@ -63,6 +63,60 @@ uninstall_from() {
         python3 - "$settings_file" <<'EOF'
 import sys, json, os
 
+def remove_cc_notify_hooks(data, event_name):
+    """Remove cc-notify hooks from a specific event, returns (modified_data, was_modified, found_count)"""
+    modified = False
+    found_count = 0
+
+    if not isinstance(data, dict) or "hooks" not in data or not isinstance(data["hooks"], dict):
+        return data, modified, found_count
+
+    if event_name not in data["hooks"] or not isinstance(data["hooks"][event_name], list):
+        return data, modified, found_count
+
+    event_hooks = data["hooks"][event_name]
+    new_event_hooks = []
+
+    for block in event_hooks:
+        if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
+            block_hooks = block["hooks"]
+            filtered_hooks = []
+            cc_notify_found_in_block = False
+
+            for h in block_hooks:
+                if (isinstance(h, dict) and
+                    "command" in h and
+                    isinstance(h["command"], str) and
+                    "cc-notify" in h["command"] and
+                    h.get("type") == "command" and
+                    h.get("timeout") == 10 and
+                    h.get("async") == True):
+                    cc_notify_found_in_block = True
+                    found_count += 1
+                else:
+                    filtered_hooks.append(h)
+
+            if filtered_hooks:
+                new_block = block.copy()
+                new_block["hooks"] = filtered_hooks
+                new_event_hooks.append(new_block)
+                if cc_notify_found_in_block:
+                    modified = True
+            elif cc_notify_found_in_block:
+                modified = True
+            else:
+                new_event_hooks.append(block)
+        else:
+            new_event_hooks.append(block)
+
+    if modified:
+        if new_event_hooks:
+            data["hooks"][event_name] = new_event_hooks
+        else:
+            del data["hooks"][event_name]
+
+    return data, modified, found_count
+
 try:
     settings_file = sys.argv[1]
 
@@ -73,81 +127,37 @@ try:
             print("[WARNING] settings.json is not valid JSON, cannot modify automatically")
             sys.exit(0)
 
-    modified = False
+    total_modified = False
+    total_found = 0
 
-    if isinstance(data, dict) and "hooks" in data and isinstance(data["hooks"], dict):
-        if "Stop" in data["hooks"] and isinstance(data["hooks"]["Stop"], list):
-            stop_hooks = data["hooks"]["Stop"]
-            new_stop_hooks = []
+    # Process both Stop and StopFailure events
+    for event in ["Stop", "StopFailure"]:
+        data, modified, found = remove_cc_notify_hooks(data, event)
+        if modified:
+            total_modified = True
+            total_found += found
+            if found > 0:
+                print(f"[OK] Removed {found} cc-notify hook(s) from {event} hooks")
 
-            # Only remove cc-notify hooks added by our installer
-            for block in stop_hooks:
-                if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
-                    block_hooks = block["hooks"]
-                    filtered_hooks = []
-                    cc_notify_found_in_block = False
+    if total_modified:
+        # If hooks is now empty, remove the hooks key entirely
+        if "hooks" in data and not data["hooks"]:
+            del data["hooks"]
+            print("[OK] Removed empty hooks configuration")
 
-                    for h in block_hooks:
-                        # Only remove hooks that match our exact installer signature
-                        if (isinstance(h, dict) and
-                            "command" in h and
-                            isinstance(h["command"], str) and
-                            "cc-notify" in h["command"] and
-                            h.get("type") == "command" and
-                            h.get("timeout") == 10 and
-                            h.get("async") == True):
-                            cc_notify_found_in_block = True
-                            modified = True
-                        else:
-                            # Keep all other hooks untouched
-                            filtered_hooks.append(h)
-
-                    if filtered_hooks:
-                        # Keep the block if there are other hooks left
-                        new_block = block.copy()
-                        new_block["hooks"] = filtered_hooks
-                        new_stop_hooks.append(new_block)
-                    elif cc_notify_found_in_block:
-                        # Block only had our cc-notify hook, remove it entirely
-                        modified = True
-                    else:
-                        # Block has no cc-notify hooks, keep it as is
-                        new_stop_hooks.append(block)
-                else:
-                    # Not a hook block we recognize, keep it completely untouched
-                    new_stop_hooks.append(block)
-
-            if modified:
-                if new_stop_hooks:
-                    data["hooks"]["Stop"] = new_stop_hooks
-                    print("[OK] Removed cc-notify hook from Stop hooks")
-                else:
-                    # No more Stop hooks, remove the Stop key
-                    del data["hooks"]["Stop"]
-                    print("[OK] Removed empty Stop hooks entry")
-
-                # If hooks is now empty, remove the hooks key entirely
-                if not data["hooks"]:
-                    del data["hooks"]
-                    print("[OK] Removed empty hooks configuration")
-
-                # Write back the modified settings
-                try:
-                    with open(settings_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=4, ensure_ascii=False)
-                        f.write("\n")
-                except IOError:
-                    print("[WARNING] Failed to write to settings.json (permission denied)")
-                    print("[INFO] Please manually remove the cc-notify entry from $settings_file if needed")
-            else:
-                print("[INFO] No cc-notify hook found in settings.json")
-        else:
-            print("[INFO] No Stop hooks found in settings.json")
+        # Write back the modified settings
+        try:
+            with open(settings_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+                f.write("\n")
+        except IOError:
+            print("[WARNING] Failed to write to settings.json (permission denied)")
+            print("[INFO] Please manually remove the cc-notify entries from $settings_file if needed")
     else:
-        print("[INFO] No hooks configuration found in settings.json")
+        print("[INFO] No cc-notify hooks found in settings.json")
 except Exception as e:
     print(f"[WARNING] An error occurred while processing settings.json: {str(e)}")
-    print("[INFO] Please manually remove the cc-notify entry from $settings_file if needed")
+    print("[INFO] Please manually remove the cc-notify entries from $settings_file if needed")
 EOF
     else
         echo "[INFO] No settings.json file found at $settings_file"

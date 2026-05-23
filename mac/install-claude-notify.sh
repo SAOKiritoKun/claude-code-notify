@@ -100,19 +100,28 @@ try:
     if "hooks" not in data or not isinstance(data["hooks"], dict):
         data["hooks"] = {}
 
-    hook_entry = {
+    # Create hook entries for both Stop (success) and StopFailure (failed) events
+    hook_entry_success = {
         "type":    "command",
         "command": f"bash \"{notify_dest}\"",
         "timeout": 10,
         "async":   True
     }
-    stop_block = {"hooks": [hook_entry]}
+    hook_entry_failed = {
+        "type":    "command",
+        "command": f"bash \"{notify_dest}\" --failed",
+        "timeout": 10,
+        "async":   True
+    }
+    stop_block = {"hooks": [hook_entry_success]}
+    stop_failure_block = {"hooks": [hook_entry_failed]}
 
+    # Process Stop event
     stop_hooks = data["hooks"].get("Stop", [])
     if not isinstance(stop_hooks, list):
         stop_hooks = []
 
-    # Find existing cc-notify entry index
+    # Find existing cc-notify entry index in Stop
     existing_index = -1
     for i, block in enumerate(stop_hooks):
         if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
@@ -130,6 +139,30 @@ try:
     else:
         data["hooks"]["Stop"] = [stop_block]
         print("[OK] Created new Stop hook configuration")
+
+    # Process StopFailure event
+    stop_failure_hooks = data["hooks"].get("StopFailure", [])
+    if not isinstance(stop_failure_hooks, list):
+        stop_failure_hooks = []
+
+    # Find existing cc-notify entry index in StopFailure
+    existing_index_failure = -1
+    for i, block in enumerate(stop_failure_hooks):
+        if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
+            for h in block["hooks"]:
+                if isinstance(h, dict) and "command" in h and "cc-notify" in h["command"]:
+                    existing_index_failure = i
+                    break
+
+    if existing_index_failure >= 0:
+        stop_failure_hooks[existing_index_failure] = stop_failure_block
+        print("[OK] Updated existing cc-notify StopFailure hook")
+    elif stop_failure_hooks:
+        stop_failure_hooks.append(stop_failure_block)
+        print("[OK] Added cc-notify StopFailure hook to existing hooks")
+    else:
+        data["hooks"]["StopFailure"] = [stop_failure_block]
+        print("[OK] Created new StopFailure hook configuration")
 
     # Write back the modified settings
     with open(settings_file, "w", encoding="utf-8") as f:

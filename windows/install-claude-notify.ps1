@@ -88,40 +88,60 @@ if (-not $json.PSObject.Properties['hooks']) {
     $json | Add-Member -MemberType NoteProperty -Name 'hooks' -Value ([PSCustomObject]@{})
 }
 
-$hookEntry = [PSCustomObject]@{
+# Create hook entries for both Stop (success) and StopFailure (failed) events
+$hookEntrySuccess = [PSCustomObject]@{
     type    = "command"
-    command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`" -Sound ding.wav"
+    command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`""
     timeout = 10
     async   = $true
 }
-$stopBlock = [PSCustomObject]@{ hooks = @($hookEntry) }
+$hookEntryFailed = [PSCustomObject]@{
+    type    = "command"
+    command = "powershell -ExecutionPolicy Bypass -NonInteractive -File `"$notifyDest`" -Failed"
+    timeout = 10
+    async   = $true
+}
+$stopBlock = [PSCustomObject]@{ hooks = @($hookEntrySuccess) }
+$stopFailureBlock = [PSCustomObject]@{ hooks = @($hookEntryFailed) }
 
-$stopProp = $json.hooks.PSObject.Properties['Stop']
+# Function to add or update hook for a specific event
+function Add-Or-Update-Hook {
+    param(
+        [PSObject]$Json,
+        [string]$EventName,
+        [PSObject]$HookBlock
+    )
 
-# Check if a cc-notify entry already exists in Stop
-$existingIndex = -1
-if ($stopProp) {
-    $arr = @($stopProp.Value)
-    for ($i = 0; $i -lt $arr.Count; $i++) {
-        $cmds = @($arr[$i].hooks) | Where-Object { $_.command -like "*cc-notify*" }
-        if ($cmds) { $existingIndex = $i; break }
+    $eventProp = $Json.hooks.PSObject.Properties[$EventName]
+    $existingIndex = -1
+
+    if ($eventProp) {
+        $arr = @($eventProp.Value)
+        for ($i = 0; $i -lt $arr.Count; $i++) {
+            $cmds = @($arr[$i].hooks) | Where-Object { $_.command -like "*cc-notify*" }
+            if ($cmds) { $existingIndex = $i; break }
+        }
+
+        if ($existingIndex -ge 0) {
+            # Replace existing entry
+            $arr[$existingIndex] = $HookBlock
+            $Json.hooks.$EventName = $arr
+            Write-Host "[OK] Updated existing $EventName hook in settings.json"
+        } else {
+            # Append to existing array
+            $Json.hooks.$EventName = @($eventProp.Value) + $HookBlock
+            Write-Host "[OK] Appended $EventName hook to settings.json"
+        }
+    } else {
+        # Create new event array
+        $Json.hooks | Add-Member -MemberType NoteProperty -Name $EventName -Value @($HookBlock)
+        Write-Host "[OK] Added $EventName hook to settings.json"
     }
 }
 
-if ($existingIndex -ge 0) {
-    # Replace the existing cc-notify entry in-place
-    $arr[$existingIndex] = $stopBlock
-    $json.hooks.Stop = $arr
-    Write-Host "[OK] Updated existing Stop hook in settings.json"
-} elseif ($stopProp) {
-    # Stop array exists but no cc-notify entry — append
-    $json.hooks.Stop = @($stopProp.Value) + $stopBlock
-    Write-Host "[OK] Appended Stop hook to settings.json"
-} else {
-    # No Stop array yet — create it
-    $json.hooks | Add-Member -MemberType NoteProperty -Name 'Stop' -Value @($stopBlock)
-    Write-Host "[OK] Added Stop hook to settings.json"
-}
+# Add both events
+Add-Or-Update-Hook -Json $json -EventName "Stop" -HookBlock $stopBlock
+Add-Or-Update-Hook -Json $json -EventName "StopFailure" -HookBlock $stopFailureBlock
 
 $pretty = Format-Json ($json | ConvertTo-Json -Depth 20 -Compress)
 [System.IO.File]::WriteAllText($settingsFile, $pretty, [System.Text.Encoding]::UTF8)

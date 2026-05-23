@@ -1,21 +1,77 @@
 param(
-    [string]$Title = "Claude Code Task Done",
-    [string]$Sound = "ding.wav"
+    [string]$Title = "",
+    [string]$Sound = "",
+    [switch]$Failed
 )
 
+# Default titles and messages
+$TitleSuccess = "✅ Claude Code Task Done"
+$TitleFailed = "❌ Claude Code Task Failed"
+$MessageSuccess = "Task completed"
+$MessageFailed = "Task execution failed"
+
 # Sound: filename under C:\Windows\Media\ or full path. Empty string to disable.
-# Priority: -Sound param > CC_NOTIFY_SOUND env var > default ding.wav
-if ($Sound -eq "ding.wav" -and $env:CC_NOTIFY_SOUND) {
+# Priority: -Sound param > CC_NOTIFY_SOUND env var > default sound (based on status)
+$defaultSoundSuccess = "ding.wav"
+$defaultSoundFailed = "Windows Error.wav"  # 失败时默认使用系统错误音效
+
+# 音效优先级处理
+$userSpecifiedSound = $PSBoundParameters.ContainsKey('Sound')
+if (-not $userSpecifiedSound -and $env:CC_NOTIFY_SOUND) {
     $Sound = $env:CC_NOTIFY_SOUND
 }
 
-if (-not [Console]::IsInputRedirected) {
-    $Message = "(no input)"
-} else {
+# 预读取stdin内容，供后面所有逻辑使用（避免重复读取流）
+$raw = ""
+$json = $null
+if ([Console]::IsInputRedirected) {
     try {
         [Console]::InputEncoding = [System.Text.Encoding]::UTF8
-        $raw  = [Console]::In.ReadToEnd()
-        $json = $raw | ConvertFrom-Json
+        $raw = [Console]::In.ReadToEnd()
+        $json = $raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        # 解析失败不影响继续执行
+        $json = $null
+    }
+}
+
+# 自动检测失败状态，如果没有手动指定-Failed参数
+if (-not $Failed -and $json -ne $null) {
+    try {
+        if ($json.PSObject.Properties['success'] -and $json.success -eq $false) {
+            $Failed = $true
+        }
+    } catch {
+        # 检测失败不影响继续执行
+    }
+}
+
+# 设置标题和默认音效
+if (-not $Title) {
+    if ($Failed) {
+        $Title = $TitleFailed
+    } else {
+        $Title = $TitleSuccess
+    }
+}
+
+# 如果没有指定音效（用户没传参数也没有环境变量），根据状态设置默认音效
+if (-not $userSpecifiedSound -and $Sound -eq "") {
+    if ($Failed) {
+        $Sound = $defaultSoundFailed
+    } else {
+        $Sound = $defaultSoundSuccess
+    }
+}
+
+if (-not [Console]::IsInputRedirected -or $json -eq $null) {
+    $Message = "(no input)"
+    # 没有输入时也应用失败状态
+    if ($Failed -and -not $Message) {
+        $Message = $MessageFailed
+    }
+} else {
+    try {
 
         $userMsg = $null
 
@@ -38,13 +94,42 @@ if (-not [Console]::IsInputRedirected) {
             }
         }
 
+        # 提取错误信息（如果是失败事件）
+        $errorInfo = ""
+        if ($Failed -and $json.PSObject.Properties['error']) {
+            $error = $json.error
+            if ($error -is [PSCustomObject]) {
+                # 处理错误对象，优先取message/reason字段
+                if ($error.PSObject.Properties['message']) {
+                    $errorInfo = $error.message.ToString()
+                } elseif ($error.PSObject.Properties['reason']) {
+                    $errorInfo = $error.reason.ToString()
+                } else {
+                    $errorInfo = $error.ToString()
+                }
+            } else {
+                $errorInfo = $error.ToString()
+            }
+            if ($errorInfo.Length -gt 100) {
+                $errorInfo = $errorInfo.Substring(0, 97) + "..."
+            }
+        }
+
         if ($userMsg) {
             $Message = if ($userMsg.Length -gt 200) { $userMsg.Substring(0, 197) + '...' } else { $userMsg }
         } else {
-            $Message = "Task completed"
+            $Message = if ($Failed) { $MessageFailed } else { $MessageSuccess }
+        }
+
+        # 失败时添加错误信息
+        if ($Failed -and $errorInfo) {
+            $Message = "$Message`n⚠️ Error: $errorInfo"
+            if ($Message.Length -gt 300) {
+                $Message = $Message.Substring(0, 297) + "..."
+            }
         }
     } catch {
-        $Message = "Task completed"
+        $Message = if ($Failed) { $MessageFailed } else { $MessageSuccess }
     }
 }
 

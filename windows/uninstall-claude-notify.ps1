@@ -48,64 +48,92 @@ function Remove-CcNotify {
         $raw  = Get-Content $settingsFile -Raw -Encoding UTF8
         $json = $raw | ConvertFrom-Json
 
-        $stopProp = $json.hooks.PSObject.Properties['Stop']
-        $found = $false
+        $totalFound = 0
 
-        if ($stopProp) {
-            $arr = @($stopProp.Value)
-            $newArr = @()
-            foreach ($block in $arr) {
-                if ($block.PSObject.Properties['hooks'] -and $block.hooks -is [array]) {
-                    $filteredHooks = @()
-                    $ccNotifyInBlock = $false
-                    foreach ($hook in $block.hooks) {
-                        # Only remove hooks that match our exact installer signature
-                        if ($hook.PSObject.Properties['command'] -and
-                            $hook.command -like "*cc-notify*" -and
-                            $hook.type -eq "command" -and
-                            $hook.timeout -eq 10 -and
-                            $hook.async -eq $true) {
-                            $ccNotifyInBlock = $true
-                            $found = $true
-                        } else {
-                            # Keep all other hooks untouched
-                            $filteredHooks += $hook
+        # Function to remove cc-notify hooks from a specific event
+        function Remove-Event-Hooks {
+            param(
+                [PSObject]$Json,
+                [string]$EventName
+            )
+
+            $found = 0
+            $eventProp = $Json.hooks.PSObject.Properties[$EventName]
+
+            if ($eventProp) {
+                $arr = @($eventProp.Value)
+                $newArr = @()
+                foreach ($block in $arr) {
+                    if ($block.PSObject.Properties['hooks'] -and $block.hooks -is [array]) {
+                        $filteredHooks = @()
+                        $ccNotifyInBlock = $false
+                        foreach ($hook in $block.hooks) {
+                            # Only remove hooks that match our exact installer signature
+                            if ($hook.PSObject.Properties['command'] -and
+                                $hook.command -like "*cc-notify*" -and
+                                $hook.type -eq "command" -and
+                                $hook.timeout -eq 10 -and
+                                $hook.async -eq $true) {
+                                $ccNotifyInBlock = $true
+                                $found++
+                            } else {
+                                # Keep all other hooks untouched
+                                $filteredHooks += $hook
+                            }
                         }
-                    }
 
-                    if ($filteredHooks.Count -gt 0) {
-                        # Keep the block with remaining hooks
-                        $newBlock = $block.PSObject.Copy()
-                        $newBlock.hooks = $filteredHooks
-                        $newArr += $newBlock
-                    } elseif ($ccNotifyInBlock) {
-                        # Block only had our cc-notify hook, skip adding it
-                        $found = $true
+                        if ($filteredHooks.Count -gt 0) {
+                            # Keep the block with remaining hooks
+                            $newBlock = $block.PSObject.Copy()
+                            $newBlock.hooks = $filteredHooks
+                            $newArr += $newBlock
+                        } elseif ($ccNotifyInBlock) {
+                            # Block only had our cc-notify hook, skip adding it
+                        } else {
+                            # No cc-notify hooks, keep the block as is
+                            $newArr += $block
+                        }
                     } else {
-                        # No cc-notify hooks, keep the block as is
+                        # Not a recognized block format, keep it untouched
                         $newArr += $block
                     }
-                } else {
-                    # Not a recognized block format, keep it untouched
-                    $newArr += $block
                 }
+
+                if ($found -gt 0) {
+                    if ($newArr.Count -eq 0) {
+                        $Json.hooks.PSObject.Properties.Remove($EventName)
+                    } else {
+                        $Json.hooks.$EventName = $newArr
+                    }
+                    Write-Host "[OK] Removed $found cc-notify $EventName hook(s) from settings.json"
+                } else {
+                    Write-Host "[SKIP] No cc-notify hooks found in $EventName"
+                }
+            } else {
+                Write-Host "[SKIP] No $EventName hooks in $settingsFile"
             }
 
-            if ($found) {
-                if ($newArr.Count -eq 0) {
-                    $json.hooks.PSObject.Properties.Remove('Stop')
-                } else {
-                    $json.hooks.Stop = $newArr
+            return $found
+        }
+
+        # Process both Stop and StopFailure events
+        if ($json.PSObject.Properties['hooks']) {
+            $totalFound += Remove-Event-Hooks -Json $json -EventName "Stop"
+            $totalFound += Remove-Event-Hooks -Json $json -EventName "StopFailure"
+
+            if ($totalFound -gt 0) {
+                # If hooks object is now empty, remove it entirely
+                if ($json.hooks.PSObject.Properties.Count -eq 0) {
+                    $json.PSObject.Properties.Remove('hooks')
                 }
 
                 $pretty = Format-Json ($json | ConvertTo-Json -Depth 20 -Compress)
                 [System.IO.File]::WriteAllText($settingsFile, $pretty, [System.Text.Encoding]::UTF8)
-                Write-Host "[OK] Removed cc-notify Stop hook from settings.json"
             } else {
-                Write-Host "[SKIP] No cc-notify hook found in $settingsFile"
+                Write-Host "[SKIP] No cc-notify hooks found in $settingsFile"
             }
         } else {
-            Write-Host "[SKIP] No Stop hooks in $settingsFile"
+            Write-Host "[SKIP] No hooks configuration found in $settingsFile"
         }
     } else {
         Write-Host "[SKIP] settings.json not found at $settingsFile"
