@@ -11,12 +11,13 @@ Language: English | [中文文档](README_CN.md)
 
 ## Overview
 
-`claude-code-notify` hooks into Claude Code's `Stop` (success), `StopFailure` (failure), and `PermissionRequest` (authorization required) events. You'll get a system notification whenever Claude needs your attention, so you don't have to keep checking the terminal:
+`claude-code-notify` hooks into Claude Code's `Stop` (success), `StopFailure` (failure), `PermissionRequest` (authorization required), and `SessionStart` (new/resumed session) events. You'll get a system notification whenever Claude needs your attention, so you don't have to keep checking the terminal:
 
 Notifications have distinct titles and audio cues for each scenario:
 - **Success**: "Claude Code Task Done" title with positive notification sound when a task completes normally
 - **Failure**: "Claude Code Task Failed" title with error notification sound when a task fails (includes error details)
 - **Permission Request**: "Claude Code Permission Request" title with neutral notification sound when Claude needs your approval to perform an operation (shows what action is being requested)
+- **Session Start**: "Claude Code Session Started" title with gentle notification sound when a session starts or resumes (shows project path and session ID)
 
 | Platform | Mechanism |
 |----------|-----------|
@@ -53,7 +54,7 @@ Both installers prompt you to choose an install scope:
 - **Global** — applies to all projects (`~/.claude`)
 - **Project-local** — applies only to the current project (`.claude/` in the working directory)
 
-After installation, restart Claude Code or reload `/hooks` to activate.
+After installation, restart Claude Code or reload `/hooks` to activate. The installer automatically registers hooks for all four events: `Stop`, `StopFailure`, `PermissionRequest`, and `SessionStart`.
 
 > **Windows:** The installer also registers a registry key under `HKCU` (no admin rights required) so notifications appear as "Claude Code" in the Notification Center.
 
@@ -95,6 +96,7 @@ Default sounds:
 - Success: `ding.wav` (from `C:\Windows\Media\`)
 - Failure: `Windows Error.wav` (from `C:\Windows\Media\`)
 - Permission request: `notify.wav` (from `C:\Windows\Media\`)
+- Session start: `notify.wav` (from `C:\Windows\Media\`)
 
 Customize via the `-Sound` parameter in the hook command in `settings.json`:
 
@@ -128,6 +130,7 @@ Default sounds:
 - Success: `Funk` (built-in system sound)
 - Failure: `Basso` (built-in system sound)
 - Permission request: `Glass` (built-in system sound)
+- Session start: `Glass` (built-in system sound)
 
 Customize via the `CC_NOTIFY_SOUND` environment variable in `.zshrc` or `.bash_profile`:
 
@@ -161,14 +164,16 @@ Or set it inline in the hook command in `settings.json`:
 ## How It Works
 
 1. The installer copies the notify script into `<target>/.claude/hooks/cc-notify/`
-2. It patches `<target>/.claude/settings.json` to register three async hooks:
+2. It patches `<target>/.claude/settings.json` to register four async hooks:
    - `Stop` hook: For successful task completion
    - `StopFailure` hook: For execution failures (API errors, permission denials, tool crashes, etc.)
    - `PermissionRequest` hook: For when Claude needs user approval to perform an operation
+   - `SessionStart` hook: For when a new session starts or an existing session is resumed
 3. On each event, the notify script reads the JSON payload from stdin:
    - **Success/Failure events**: Detects state, reads the last user message from transcript, shows task context
    - **Permission request events**: Extracts operation type and details, shows what action Claude is requesting approval for, with type prefixes ([Command] for shell commands, [Edit] for file modifications, [Read] for file access, [Network] for external requests)
-   - Displays appropriate notification with scenario-specific title, icon, and sound
+   - **Session start events**: Detects session type (new/resumed) and workspace path, shows project location with simplified path formatting
+   - Displays appropriate notification with scenario-specific title and sound
 4. Falls back to scenario-specific default messages if payload parsing fails
 
 **The installer is idempotent** — re-running it updates the existing hook entry rather than duplicating it.
@@ -181,13 +186,13 @@ Or set it inline in the hook command in `settings.json`:
 
 ```
 windows/
-├── notify.ps1                    # Notification script (invoked on Stop/StopFailure/PermissionRequest events)
-├── install-claude-notify.ps1     # Interactive installer (registers all three event hooks)
+├── notify.ps1                    # Notification script (invoked on Stop/StopFailure/PermissionRequest/SessionStart events)
+├── install-claude-notify.ps1     # Interactive installer (registers all four event hooks)
 └── uninstall-claude-notify.ps1   # Interactive uninstaller (cleans up all hook entries)
 
 mac/
-├── notify.sh                     # Notification script (invoked on Stop/StopFailure/PermissionRequest events)
-├── install-claude-notify.sh      # Interactive installer (registers all three event hooks)
+├── notify.sh                     # Notification script (invoked on Stop/StopFailure/PermissionRequest/SessionStart events)
+├── install-claude-notify.sh      # Interactive installer (registers all four event hooks)
 └── uninstall-claude-notify.sh    # Interactive uninstaller (cleans up all hook entries)
 ```
 

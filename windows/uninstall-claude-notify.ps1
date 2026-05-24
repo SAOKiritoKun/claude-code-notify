@@ -72,7 +72,6 @@ function Remove-CcNotify {
                             if ($hook.PSObject.Properties['command'] -and
                                 $hook.command -like "*cc-notify*" -and
                                 $hook.type -eq "command" -and
-                                $hook.timeout -eq 10 -and
                                 $hook.async -eq $true) {
                                 $ccNotifyInBlock = $true
                                 $found++
@@ -116,11 +115,12 @@ function Remove-CcNotify {
             return $found
         }
 
-        # Process Stop, StopFailure and PermissionRequest events
+        # Process Stop, StopFailure, PermissionRequest and SessionStart events
         if ($json.PSObject.Properties['hooks']) {
             $totalFound += Remove-Event-Hooks -Json $json -EventName "Stop"
             $totalFound += Remove-Event-Hooks -Json $json -EventName "StopFailure"
             $totalFound += Remove-Event-Hooks -Json $json -EventName "PermissionRequest"
+            $totalFound += Remove-Event-Hooks -Json $json -EventName "SessionStart"
 
             if ($totalFound -gt 0) {
                 # If hooks object is now empty, remove it entirely

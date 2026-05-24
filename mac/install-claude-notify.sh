@@ -100,7 +100,7 @@ try:
     if "hooks" not in data or not isinstance(data["hooks"], dict):
         data["hooks"] = {}
 
-    # Create hook entries for Stop (success), StopFailure (failed), and PermissionRequest events
+    # Create hook entries for Stop (success), StopFailure (failed), PermissionRequest, and SessionStart events
     hook_entry_success = {
         "type":    "command",
         "command": f"bash \"{notify_dest}\"",
@@ -119,9 +119,16 @@ try:
         "timeout": 10,
         "async":   True  # 权限通知是异步的，不阻塞审批流程
     }
+    hook_entry_session = {
+        "type":    "command",
+        "command": f"bash \"{notify_dest}\" --session-start",
+        "timeout": 5,
+        "async":   True  # 会话通知是异步的，不阻塞启动流程
+    }
     stop_block = {"hooks": [hook_entry_success]}
     stop_failure_block = {"hooks": [hook_entry_failed]}
     permission_block = {"hooks": [hook_entry_permission]}
+    session_block = {"hooks": [hook_entry_session]}
 
     # Process Stop event
     stop_hooks = data["hooks"].get("Stop", [])
@@ -194,6 +201,30 @@ try:
     else:
         data["hooks"]["PermissionRequest"] = [permission_block]
         print("[OK] Created new PermissionRequest hook configuration")
+
+    # Process SessionStart event
+    session_hooks = data["hooks"].get("SessionStart", [])
+    if not isinstance(session_hooks, list):
+        session_hooks = []
+
+    # Find existing cc-notify entry index in SessionStart
+    existing_index_session = -1
+    for i, block in enumerate(session_hooks):
+        if isinstance(block, dict) and "hooks" in block and isinstance(block["hooks"], list):
+            for h in block["hooks"]:
+                if isinstance(h, dict) and "command" in h and "cc-notify" in h["command"]:
+                    existing_index_session = i
+                    break
+
+    if existing_index_session >= 0:
+        session_hooks[existing_index_session] = session_block
+        print("[OK] Updated existing cc-notify SessionStart hook")
+    elif session_hooks:
+        session_hooks.append(session_block)
+        print("[OK] Added cc-notify SessionStart hook to existing hooks")
+    else:
+        data["hooks"]["SessionStart"] = [session_block]
+        print("[OK] Created new SessionStart hook configuration")
 
     # Write back the modified settings
     with open(settings_file, "w", encoding="utf-8") as f:

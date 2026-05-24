@@ -89,7 +89,6 @@ def remove_cc_notify_hooks(data, event_name):
                     isinstance(h["command"], str) and
                     "cc-notify" in h["command"] and
                     h.get("type") == "command" and
-                    h.get("timeout") == 10 and
                     h.get("async") == True):
                     cc_notify_found_in_block = True
                     found_count += 1
@@ -130,8 +129,8 @@ try:
     total_modified = False
     total_found = 0
 
-    # Process Stop, StopFailure and PermissionRequest events
-    for event in ["Stop", "StopFailure", "PermissionRequest"]:
+    # Process Stop, StopFailure, PermissionRequest and SessionStart events
+    for event in ["Stop", "StopFailure", "PermissionRequest", "SessionStart"]:
         data, modified, found = remove_cc_notify_hooks(data, event)
         if modified:
             total_modified = True

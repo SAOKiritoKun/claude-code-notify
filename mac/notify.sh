@@ -4,9 +4,12 @@
 TITLE_SUCCESS="Claude Code Task Done"
 TITLE_FAILED="Claude Code Task Failed"
 TITLE_PERMISSION="Claude Code Permission Request"
+TITLE_SESSION="Claude Code Session Started"
 MESSAGE_SUCCESS="Task completed"
 MESSAGE_FAILED="Task execution failed"
 MESSAGE_PERMISSION="Permission request requires your approval"
+MESSAGE_SESSION_NEW="New session started at"
+MESSAGE_SESSION_RESUMED="Session resumed at"
 # 音效配置：可以是内置音效名或自定义音效文件路径
 # 内置音效列表：Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink
 # 自定义音效支持格式：aiff, wav, caf
@@ -14,10 +17,12 @@ MESSAGE_PERMISSION="Permission request requires your approval"
 SOUND_SUCCESS="${CC_NOTIFY_SOUND:-Funk}"
 SOUND_FAILED="${CC_NOTIFY_SOUND:-Basso}"  # 失败时默认使用不同的音效
 SOUND_PERMISSION="${CC_NOTIFY_SOUND:-Glass}"  # 权限请求时使用中性提示音
+SOUND_SESSION="${CC_NOTIFY_SOUND:-Glass}"   # 会话启动时使用温和的提示音
 
 # 解析命令行参数
 IS_FAILED=""
 IS_PERMISSION=""
+IS_SESSION=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --failed)
@@ -26,6 +31,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --permission)
             IS_PERMISSION="1"
+            shift
+            ;;
+        --session-start)
+            IS_SESSION="1"
             shift
             ;;
         *)
@@ -53,7 +62,7 @@ else
     RAW=$(cat)
 
     # 检测事件类型
-    if [ -z "$IS_PERMISSION" ]; then
+    if [ -z "$IS_PERMISSION" ] && [ -z "$IS_SESSION" ]; then
         EVENT_TYPE=$(echo "$RAW" | python3 -c "
 import sys, json
 try:
@@ -64,6 +73,8 @@ except:
 " 2>/dev/null)
         if [ "$EVENT_TYPE" = "PermissionRequest" ]; then
             IS_PERMISSION="1"
+        elif [ "$EVENT_TYPE" = "SessionStart" ]; then
+            IS_SESSION="1"
         elif [ -z "$IS_FAILED" ]; then
             SUCCESS=$(echo "$RAW" | python3 -c "
 import sys, json
@@ -80,7 +91,10 @@ except:
     fi
 
     # 设置标题和音效
-    if [ -n "$IS_PERMISSION" ]; then
+    if [ -n "$IS_SESSION" ]; then
+        TITLE="$TITLE_SESSION"
+        SOUND="$SOUND_SESSION"
+    elif [ -n "$IS_PERMISSION" ]; then
         TITLE="$TITLE_PERMISSION"
         SOUND="$SOUND_PERMISSION"
     elif [ -z "$IS_FAILED" ]; then
@@ -167,7 +181,67 @@ except:
 " 2>/dev/null)
     fi
 
-    if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    # 提取会话启动信息（如果是会话事件）
+    SESSION_INFO=""
+    if [ -n "$IS_SESSION" ]; then
+        SESSION_INFO=$(echo "$RAW" | python3 -c "
+import sys, json, os
+try:
+    d = json.load(sys.stdin)
+    # 先获取所有字段方便调试
+    all_fields = list(d.keys())
+
+    # 根据source字段区分会话类型
+    source = d.get('source', d.get('event_source', '')).lower()
+    # 获取工作区路径，兼容所有可能的字段
+    workspace_path = ''
+    for key in ['cwd', 'workspace_path', 'path', 'directory']:
+        if key in d:
+            workspace_path = d[key]
+            break
+    # 获取会话ID
+    session_id = d.get('session_id', '')
+
+    # 简化路径显示，用~代替用户目录
+    home = os.path.expanduser('~')
+    if workspace_path and isinstance(workspace_path, str) and workspace_path.startswith(home):
+        workspace_path = '~' + workspace_path[len(home):]
+
+    # 根据source显示对应文案
+    if source == 'resume' or 'resume' in source or 'continue' in source:
+        prefix = 'Session resumed at'
+    elif source == 'startup' or 'start' in source or 'new' in source:
+        prefix = 'New session started at'
+    else:
+        prefix = 'Session started at'
+
+    result_parts = []
+    if workspace_path and isinstance(workspace_path, str):
+        result_parts.append(f'{prefix} {workspace_path}')
+    else:
+        result_parts.append(f'{prefix} current directory')
+
+    # 添加会话ID信息
+    if session_id:
+        result_parts.append(f'Session ID: {session_id}')
+
+    # 使用换行分隔
+    result = '\n'.join(result_parts)
+    print(result[:300])  # 增加长度限制
+except Exception as e:
+    # 出错时显示错误信息和raw内容
+    print(f'Session error | {str(e)[:30]} | RAW: {sys.stdin.read()[:100]}...')
+")
+    fi
+
+    # 会话启动优先显示会话信息，不需要读取对话记录
+    if [ -n "$IS_SESSION" ]; then
+        if [ -n "$SESSION_INFO" ]; then
+            MESSAGE="$SESSION_INFO"
+        else
+            MESSAGE="Session started"
+        fi
+    elif [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
         USER_MSG=$(python3 - "$TRANSCRIPT_PATH" <<'EOF'
 import sys, json
 
@@ -232,7 +306,16 @@ Error: $ERROR_INFO"
             fi
         fi
     else
-        if [ -z "$IS_FAILED" ]; then
+        if [ -n "$IS_PERMISSION" ]; then
+            if [ -n "$PERMISSION_INFO" ]; then
+                MESSAGE="$PERMISSION_INFO"
+            else
+                MESSAGE="$MESSAGE_PERMISSION"
+            fi
+            # 添加提示行
+            MESSAGE="$MESSAGE
+$MESSAGE_PERMISSION"
+        elif [ -z "$IS_FAILED" ]; then
             MESSAGE="$MESSAGE_SUCCESS"
         else
             MESSAGE="$MESSAGE_FAILED"

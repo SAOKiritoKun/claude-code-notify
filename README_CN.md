@@ -11,12 +11,13 @@
 
 ## 简介
 
-`claude-code-notify` 挂载到 Claude Code 的 `Stop`（成功）、`StopFailure`（失败）和 `PermissionRequest`（权限请求）事件。每当 Claude 需要你的关注时就会弹出系统通知，不用一直守在终端前等待：
+`claude-code-notify` 挂载到 Claude Code 的 `Stop`（成功）、`StopFailure`（失败）、`PermissionRequest`（权限请求）和 `SessionStart`（会话启动/恢复）事件。每当 Claude 需要你的关注时就会弹出系统通知，不用一直守在终端前等待：
 
 不同场景的通知有明确的标题和音效区分：
 - **成功**："Claude Code Task Done"标题和积极提示音，任务正常完成时触发
 - **失败**："Claude Code Task Failed"标题和错误提示音，任务执行失败时触发（包含错误详情）
 - **权限请求**："Claude Code Permission Request"标题和中性提示音，Claude需要你授权操作时触发（显示请求的具体操作内容）
+- **会话启动**："Claude Code Session Started"标题和温和提示音，会话启动或恢复时触发（显示项目路径和会话ID）
 
 | 平台    | 通知方式 |
 |---------|---------|
@@ -53,7 +54,7 @@ bash mac/install-claude-notify.sh
 - **全局** —— 适用于所有项目（`~/.claude`）
 - **仅当前项目** —— 适用于当前工作目录（`.claude/`）
 
-安装完成后，重启 Claude Code 或重新加载 `/hooks` 即可生效。
+安装完成后，重启 Claude Code 或重新加载 `/hooks` 即可生效。安装脚本会自动注册四个事件的钩子：`Stop`、`StopFailure`、`PermissionRequest` 和 `SessionStart`。
 
 ---
 
@@ -93,6 +94,7 @@ bash mac/uninstall-claude-notify.sh
 - 成功：`ding.wav`（来自 `C:\Windows\Media\`）
 - 失败：`Windows Error.wav`（来自 `C:\Windows\Media\`）
 - 权限请求：`notify.wav`（来自 `C:\Windows\Media\`）
+- 会话启动：`notify.wav`（来自 `C:\Windows\Media\`）
 
 通过 `settings.json` 钩子命令中的 `-Sound` 参数自定义：
 
@@ -126,6 +128,7 @@ $env:CC_NOTIFY_SOUND = "chord.wav"
 - 成功：`Funk`（系统内置音效）
 - 失败：`Basso`（系统内置音效）
 - 权限请求：`Glass`（系统内置音效）
+- 会话启动：`Glass`（系统内置音效）
 
 通过 `.zshrc` 或 `.bash_profile` 中的 `CC_NOTIFY_SOUND` 环境变量自定义：
 
@@ -159,14 +162,16 @@ export CC_NOTIFY_SOUND=""
 ## 工作原理
 
 1. 安装脚本将通知脚本复制到 `<目标>/.claude/hooks/cc-notify/`
-2. 修改 `<目标>/.claude/settings.json`，注册三个异步钩子：
+2. 修改 `<目标>/.claude/settings.json`，注册四个异步钩子：
    - `Stop` 钩子：任务成功完成时触发
    - `StopFailure` 钩子：任务执行失败时触发（API错误、权限被拒、工具崩溃等）
    - `PermissionRequest` 钩子：Claude需要用户授权执行操作时触发
+   - `SessionStart` 钩子：新会话启动或旧会话恢复时触发
 3. 每次事件触发时，通知脚本读取stdin中的JSON载荷：
    - **成功/失败事件**：识别任务状态，读取对话记录中的最后一条用户消息，显示任务上下文
    - **权限请求事件**：提取操作类型和详情，显示Claude请求执行的具体动作，使用类型前缀标识（[Command] 表示命令执行、[Edit] 表示文件修改、[Read] 表示文件读取、[Network] 表示外部请求）
-   - 显示对应场景的通知标题、图标和音效
+   - **会话启动事件**：识别会话类型（新会话/恢复会话）和工作区路径，显示项目位置，自动简化用户目录路径为`~`
+   - 显示对应场景的通知标题和音效
 4. 若载荷解析失败，则回退显示场景对应的默认消息
 
 **安装脚本是幂等的** —— 重复运行只会更新已有的钩子条目，不会重复添加。
@@ -179,13 +184,13 @@ export CC_NOTIFY_SOUND=""
 
 ```
 windows/
-├── notify.ps1                    # 通知脚本（Stop/StopFailure/PermissionRequest 事件时调用）
-├── install-claude-notify.ps1     # 交互式安装脚本（同时注册三个事件钩子）
+├── notify.ps1                    # 通知脚本（Stop/StopFailure/PermissionRequest/SessionStart 事件时调用）
+├── install-claude-notify.ps1     # 交互式安装脚本（同时注册四个事件钩子）
 └── uninstall-claude-notify.ps1   # 交互式卸载脚本（清理所有相关钩子条目）
 
 mac/
-├── notify.sh                     # 通知脚本（Stop/StopFailure/PermissionRequest 事件时调用）
-├── install-claude-notify.sh      # 交互式安装脚本（同时注册三个事件钩子）
+├── notify.sh                     # 通知脚本（Stop/StopFailure/PermissionRequest/SessionStart 事件时调用）
+├── install-claude-notify.sh      # 交互式安装脚本（同时注册四个事件钩子）
 └── uninstall-claude-notify.sh    # 交互式卸载脚本（清理所有相关钩子条目）
 ```
 

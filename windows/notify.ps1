@@ -2,22 +2,27 @@ param(
     [string]$Title = "",
     [string]$Sound = "",
     [switch]$Failed,
-    [switch]$Permission
+    [switch]$Permission,
+    [switch]$SessionStart
 )
 
 # Default titles and messages
 $TitleSuccess = "Claude Code Task Done"
 $TitleFailed = "Claude Code Task Failed"
 $TitlePermission = "Claude Code Permission Request"
+$TitleSession = "Claude Code Session Started"
 $MessageSuccess = "Task completed"
 $MessageFailed = "Task execution failed"
 $MessagePermission = "Permission request requires your approval"
+$MessageSessionNew = "New session started at"
+$MessageSessionResumed = "Session resumed at"
 
 # Sound: filename under C:\Windows\Media\ or full path. Empty string to disable.
 # Priority: -Sound param > CC_NOTIFY_SOUND env var > default sound (based on status)
 $defaultSoundSuccess = "ding.wav"
 $defaultSoundFailed = "Windows Error.wav"  # 失败时默认使用系统错误音效
 $defaultSoundPermission = "notify.wav"     # 权限请求时使用中性提示音
+$defaultSoundSession = "notify.wav"        # 会话启动时使用温和的提示音
 
 # 音效优先级处理
 $userSpecifiedSound = $PSBoundParameters.ContainsKey('Sound')
@@ -40,10 +45,12 @@ if ([Console]::IsInputRedirected) {
 }
 
 # 自动检测事件类型，如果没有手动指定参数
-if (-not $Failed -and -not $Permission -and $json -ne $null) {
+if (-not $Failed -and -not $Permission -and -not $SessionStart -and $json -ne $null) {
     try {
         if ($json.PSObject.Properties['event_type'] -and $json.event_type -eq "PermissionRequest") {
             $Permission = $true
+        } elseif ($json.PSObject.Properties['event_type'] -and $json.event_type -eq "SessionStart") {
+            $SessionStart = $true
         } elseif ($json.PSObject.Properties['success'] -and $json.success -eq $false) {
             $Failed = $true
         }
@@ -54,7 +61,9 @@ if (-not $Failed -and -not $Permission -and $json -ne $null) {
 
 # 设置标题和默认音效
 if (-not $Title) {
-    if ($Permission) {
+    if ($SessionStart) {
+        $Title = $TitleSession
+    } elseif ($Permission) {
         $Title = $TitlePermission
     } elseif ($Failed) {
         $Title = $TitleFailed
@@ -65,7 +74,9 @@ if (-not $Title) {
 
 # 如果没有指定音效（用户没传参数也没有环境变量），根据状态设置默认音效
 if (-not $userSpecifiedSound -and $Sound -eq "") {
-    if ($Permission) {
+    if ($SessionStart) {
+        $Sound = $defaultSoundSession
+    } elseif ($Permission) {
         $Sound = $defaultSoundPermission
     } elseif ($Failed) {
         $Sound = $defaultSoundFailed
@@ -158,6 +169,61 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
             }
         }
 
+        # 提取会话启动信息（如果是会话事件）
+        $sessionInfo = ""
+        if ($SessionStart) {
+            try {
+                # 根据source字段区分会话类型
+                $source = if ($json.PSObject.Properties['source']) { $json.source.ToString().ToLower() } else { "" }
+                # 获取工作区路径，使用cwd字段（来自官方payload）
+                $workspacePath = ""
+                if ($json.PSObject.Properties['cwd']) {
+                    $workspacePath = $json.cwd.ToString()
+                } elseif ($json.PSObject.Properties['workspace_path']) {
+                    $workspacePath = $json.workspace_path.ToString()
+                } elseif ($json.PSObject.Properties['path']) {
+                    $workspacePath = $json.path.ToString()
+                }
+                # 获取会话ID
+                $sessionId = if ($json.PSObject.Properties['session_id']) { $json.session_id.ToString() } else { "" }
+
+                # 简化路径显示，用~代替用户目录
+                $homePath = $env:USERPROFILE
+                if ($workspacePath -and $workspacePath.StartsWith($homePath)) {
+                    $workspacePath = "~" + $workspacePath.Substring($homePath.Length)
+                }
+
+                # 根据source显示对应文案
+                if ($source -eq "resume") {
+                    $prefix = $MessageSessionResumed
+                } elseif ($source -eq "startup") {
+                    $prefix = $MessageSessionNew
+                } else {
+                    $prefix = "Session started at"
+                }
+
+                $resultParts = @()
+                if ($workspacePath) {
+                    $resultParts += "$prefix $workspacePath"
+                } else {
+                    $resultParts += "$prefix current directory"
+                }
+
+                # 添加会话ID信息
+                if ($sessionId) {
+                    $resultParts += "Session ID: $sessionId"
+                }
+
+                # 使用换行分隔
+                $sessionInfo = $resultParts -join "`n"
+                if ($sessionInfo.Length -gt 300) {
+                    $sessionInfo = $sessionInfo.Substring(0, 297) + "..."
+                }
+            } catch {
+                $sessionInfo = "Claude Code session started"
+            }
+        }
+
         # 提取错误信息（如果是失败事件）
         $errorInfo = ""
         if ($Failed -and $json.PSObject.Properties['error']) {
@@ -179,8 +245,15 @@ if (-not [Console]::IsInputRedirected -or $json -eq $null) {
             }
         }
 
+        # 会话启动优先显示会话信息
+        if ($SessionStart) {
+            if ($sessionInfo) {
+                $Message = $sessionInfo
+            } else {
+                $Message = "$MessageSessionNew current directory"
+            }
         # 权限请求优先显示权限信息
-        if ($Permission) {
+        } elseif ($Permission) {
             if ($permissionInfo) {
                 $Message = $permissionInfo
             } else {
